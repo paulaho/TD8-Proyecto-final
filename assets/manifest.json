@@ -1,0 +1,35 @@
+{
+  "name": "DRE",
+  "short_name": "DRE",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#E8DBC0",
+  "theme_color": "#3D7A7B",
+  "description": "Diario de Reflexión Emocional — un espacio tranquilo para poner en palabras lo que sentís y acompañarte a pensarlo de otra forma.",
+  "orientation": "natural",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
