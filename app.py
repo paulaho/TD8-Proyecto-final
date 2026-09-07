@@ -1802,9 +1802,7 @@ def main(page: ft.Page):
         "_siguiente_batch_ia_generando": False,
         "_historial_ia": [],
         "_intentos_nivel_ia": 0,
-        "_errores_nivel_ia": [],
-        "realizo_test_inicial": False,  # <-- NUEVO
-        "perfil_contexto": {},         # <-- 
+        "_errores_nivel_ia": [],       # <-- 
         "realizo_test_inicial": False,  # <-- TEMP TEST
         "perfil_contexto": {},          # <-- TEMP TEST
     }
@@ -2066,20 +2064,20 @@ def main(page: ft.Page):
             return False
 
     def ir_a_menu_principal():
-            estado["vio_instrucciones"] = True # TEMP TEST
-            estado["realizo_test_inicial"] = False # TEMP TEST 
-            if not estado.get("vio_instrucciones"):
-                ir_a(lambda: mostrar_instrucciones(0, PAGINAS_INSTRUCCIONES_INICIALES))
-            elif not estado.get("realizo_test_inicial"):
-                mostrar_test_inicial(
-                    page=page,
-                    estado=estado,
-                    SUPABASE_USUARIOS_URL=SUPABASE_USUARIOS_URL,
-                    HEADERS=HEADERS,
-                    al_completar_callback=ir_a_menu_principal
-                )
-            else:
-                ir_a(mostrar_menu_principal)
+        if not estado.get("vio_instrucciones"):
+            ir_a(lambda: mostrar_instrucciones(0, PAGINAS_INSTRUCCIONES_INICIALES))
+
+        elif not estado.get("realizo_test_inicial"):
+            mostrar_test_inicial(
+                page=page,
+                estado=estado,
+                SUPABASE_USUARIOS_URL=SUPABASE_USUARIOS_URL,
+                HEADERS=HEADERS,
+                al_completar_callback=ir_a_menu_principal
+            )
+
+        else:
+            ir_a(mostrar_menu_principal)
 
     def entrar_con_usuario(usuario, local=False):
         estado["email"] = usuario["email"]
@@ -2100,8 +2098,6 @@ def main(page: ft.Page):
         estado["color_fondo"] = usuario.get("color_fondo") or ""
         page.bgcolor = estado["color_fondo"] or COLOR_FONDO
         estado["modo_local"] = local
-        estado["realizo_test_inicial"] = bool(usuario.get("realizo_test_inicial")) # NUEVO
-        estado["perfil_contexto"] = usuario.get("perfil_contexto") or {} # NUEVO
         estado["realizo_test_inicial"] = bool(usuario.get("realizo_test_inicial")) # TEMP TEST
         estado["perfil_contexto"] = usuario.get("perfil_contexto") or {} # TEMP TEST
 
@@ -2689,7 +2685,7 @@ def main(page: ft.Page):
             estado["vio_instrucciones"] = True
             guardar_instrucciones_vistas_supabase()
             historial.clear()
-            ir_a(mostrar_menu_principal)
+            ir_a_menu_principal()
 
         puntos = ft.Row(
             [
