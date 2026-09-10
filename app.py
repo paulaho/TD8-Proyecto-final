@@ -2073,11 +2073,16 @@ def main(page: ft.Page):
                 estado=estado,
                 SUPABASE_USUARIOS_URL=SUPABASE_USUARIOS_URL,
                 HEADERS=HEADERS,
-                al_completar_callback=ir_a_menu_principal
+                al_completar_callback=finalizar_test_inicial
             )
 
         else:
+            page.run_task(precargar_batch_ia)
             ir_a(mostrar_menu_principal)
+
+    def finalizar_test_inicial():
+        page.run_task(precargar_batch_ia)
+        ir_a_menu_principal()
 
     def entrar_con_usuario(usuario, local=False):
         estado["email"] = usuario["email"]
@@ -2100,12 +2105,6 @@ def main(page: ft.Page):
         estado["modo_local"] = local
         estado["realizo_test_inicial"] = bool(usuario.get("realizo_test_inicial")) # TEMP TEST
         estado["perfil_contexto"] = usuario.get("perfil_contexto") or {} # TEMP TEST
-
-        if (
-            not estado.get("_niveles_ia_batch")
-            and not estado.get("_batch_ia_generando")
-        ):
-            page.run_task(precargar_batch_ia)
 
         historial.clear()
 
