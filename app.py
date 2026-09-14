@@ -1,10 +1,188 @@
+from dre.supabase_usuarios import (
+    buscar_usuario_por_email,
+    crear_usuario,
+    buscar_o_crear_usuario_google,
+    actualizar_password_supabase,
+)
+
+from dre.config import (
+    SUPABASE_USUARIOS_URL,
+    SUPABASE_REPORTES_URL,
+    SUPABASE_TEMAS_URL,
+    SUPABASE_BIENESTAR_URL,
+    SUPABASE_REAPPRAISAL_URL,
+    SUPABASE_JUEGOS_REAPPRAISAL_URL,
+    HEADERS,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URL,
+    PBKDF2_ITERACIONES,
+)
+
+from dre.tema import (
+    COLOR_FONDO,
+    COLOR_TARJETA,
+    COLOR_PRIMARIO,
+    COLOR_PRIMARIO_OSCURO,
+    COLOR_CAJA_SUAVE,
+    COLOR_CAJA_INFO,
+    COLOR_EXITO,
+    COLOR_EXITO_CAJA,
+    COLOR_DORADO,
+    COLOR_TEXTO_FUERTE,
+    COLOR_TEXTO_MEDIO,
+    COLOR_TEXTO_SUAVE,
+    MENTO_ROSA,
+    MENTO_ROSA_TEXTO,
+    MENTO_VERDE,
+    MENTO_VERDE_OSCURO,
+    MENTO_AMARILLO,
+    MENTO_AMARILLO_CLARO,
+    MENTO_CELESTE,
+    MENTO_CELESTE_CAJA,
+    MENTO_NARANJA,
+    MENTO_EXITO_JUEGO,
+    MENTO_ERROR_JUEGO,
+    MENTO_SELECCION_JUEGO,
+    MENTO_FUENTE,
+)
+
+from dre.seguridad import (
+    detectar_riesgo_suicida,
+    detectar_riesgo_terceros,
+    generar_salt,
+    hash_contrasena,
+)
+
+from dre.contenido import (
+    DISTORSIONES,
+    RECOMENDACIONES_POR_DISTORSION,
+    CATEGORIAS_REAPPRAISAL,
+    UMBRAL_REAPPRAISAL_PROPIAS,
+)
+
+from dre.mento import (
+    MENTO_CATEGORIAS,
+    MENTO_EXPLICACIONES,
+    MENTO_NIVELES,
+)
+
+from dre.ia_niveles import (
+    generar_batch_familia_ia,
+    generar_batch_familia_ia_adaptativo,
+)
+
+from dre.recomendaciones import (
+    RECOMENDACIONES_POR_EMOCION,
+    RECOMENDACIONES_DUELO,
+    RECOMENDACIONES_DIAGNOSTICO,
+    RECOMENDACIONES_OBSESION,
+    FRASE_PROFESIONAL_DUELO_EN_TRATAMIENTO,
+    FRASE_PROFESIONAL_DIAGNOSTICO_EN_TRATAMIENTO,
+    FRASE_PROFESIONAL_OBSESION_EN_TRATAMIENTO,
+    recomendaciones_con_tratamiento,
+    mezclar_recomendaciones,
+    TIPO_RECOMENDACION_CBT,
+    TIPO_RECOMENDACION_BUDISTA,
+    RECOMENDACIONES_BUDISTA_POR_EMOCION,
+    RECOMENDACIONES_BUDISTA_DUELO,
+    RECOMENDACIONES_BUDISTA_DIAGNOSTICO,
+    RECOMENDACIONES_BUDISTA_OBSESION,
+    recomendaciones_budistas_para,
+)
+
+from dre.tipos_situacion import (
+    EMOCIONES,
+    TIPO_DUELO,
+    TIPO_DIAGNOSTICO,
+    TIPO_OBSESION,
+    TIPOS_SITUACION,
+    TIPOS_HECHO_CONSUMADO,
+    detectar_tipo_sugerido,
+    DESCRIPCION_TIPO_SUGERIDO,
+)
+
+from dre.bienestar import (
+    PREGUNTAS_BIENESTAR,
+    OPCIONES_BIENESTAR,
+    DESCRIPCION_BIENESTAR_POR_COLOR,
+    RECOMENDACIONES_BIENESTAR_POR_PREGUNTA,
+)
+
+from dre.gamificacion import (
+    PERLAS_SABIDURIA,
+    FLOR_POR_DEFECTO,
+    FONDO_POR_DEFECTO,
+    CATALOGO_COSMETICOS,
+    CATALOGO_COLORES_FONDO,
+)
+
+from dre.reflexion import (
+    UMBRAL_CREENCIA_ALTA,
+    MAX_RONDAS_REFLEXION,
+    UMBRAL_INTENSIDAD_PARA_INSISTIR,
+    contiene_no_sabe,
+    necesita_reflexion_extra,
+    TECNICAS_REFLEXION,
+)
+
+from dre.historial import (
+    calcular_distorsiones_frecuentes,
+    generar_csv_historial,
+    generar_texto_resumen_historial,
+)
+
+from dre.supabase_usuarios import (
+    buscar_usuario_por_email,
+    crear_usuario,
+    buscar_o_crear_usuario_google,
+    actualizar_password_supabase,
+    actualizar_usuario,
+    guardar_perfil_supabase,
+)
+
+from dre.supabase_reportes import (
+    crear_reporte,
+    actualizar_reporte,
+    obtener_reportes_usuario_supabase,
+    obtener_reportes_de_tema_supabase,
+)
+
+from dre.supabase_temas import (
+    crear_tema_supabase,
+    actualizar_tema_supabase,
+    obtener_temas_usuario_supabase,
+    obtener_tema_supabase,
+)
+
+from dre.supabase_temas import (
+    crear_tema_supabase,
+    actualizar_tema_supabase,
+    obtener_temas_usuario_supabase,
+    obtener_tema_supabase,
+    borrar_tema_supabase,
+)
+
+from dre.supabase_bienestar import (
+    obtener_chequeos_bienestar_supabase,
+    guardar_chequeo_bienestar_supabase,
+)
+
+from dre.supabase_reappraisal import (
+    obtener_ejercicios_reappraisal_supabase,
+    guardar_ejercicio_reappraisal_supabase,
+)
+
+from dre.supabase_juegos import (
+    obtener_progreso_juegos_supabase,
+    marcar_nivel_juego_completado_supabase,
+)
+
 import flet as ft
 import requests
 import os
-import hashlib
 import time
 import threading
-import unicodedata
 import random
 import json
 import csv
@@ -13,382 +191,7 @@ import urllib.parse
 import asyncio
 from datetime import datetime
 from flet.auth.providers import GoogleOAuthProvider
-from google import genai
-from pydantic import BaseModel, Field
-from typing import List
 from test_inicial import mostrar_test_inicial
-
-class EjercicioFamiliaIA(BaseModel):
-    estrategia: str
-    nombre: str
-    tipo: str
-    escenario: List[str]
-
-    opciones: List[str] = Field(
-        min_length=4,
-        max_length=4,
-    )
-
-    correctas: List[int] = Field(
-        min_length=1,
-        max_length=1,
-    )
-
-    mensaje_exito: str
-    mensaje_error: str
-
-
-class BatchEjerciciosFamiliaIA(BaseModel):
-    niveles: List[EjercicioFamiliaIA]
-
-gemini_client = genai.Client()
-
-def generar_batch_familia_ia(estado):
-    # Extraemos la información del test inicial guardada en el estado
-    contexto = estado.get("perfil_contexto", {})
-    genero = estado.get("genero", "no especificado")
-
-    # Inyectamos las variables con f""" dentro del prompt
-    prompt = f"""
-    Generá EXACTAMENTE 10 ejercicios consecutivos de regulación emocional
-    mediante cognitive reappraisal.
-
-    Categoría: Familia
-    Estrategia principal: Reconstrual
-    Tipo: opcion_multiple
-
-    INFORMACIÓN PERSONALIZADA DEL USUARIO (USALOS PARA CREAR ESCENARIOS RELEVANTES):
-    - Género: {genero}
-    - Convivencia: {contexto.get('convivencia', 'No especificado')}
-    - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
-    - Ocupación: {contexto.get('ocupacion', 'No especificado')}
-    - Estado en pareja: {contexto.get('pareja', 'No especificado')}
-
-    Los 10 ejercicios deben tener dificultad progresiva:
-    - Los primeros ejercicios deben ser más simples.
-    - La dificultad debe aumentar gradualmente.
-    - Los últimos ejercicios deben ser los más desafiantes.
-
-    Reglas generales:
-    - Los 10 escenarios deben ser diferentes entre sí.
-    - Deben representar situaciones cotidianas y realistas adaptadas al entorno familiar y personal del usuario.
-    - Exactamente 4 opciones por ejercicio.
-    - Solo UNA respuesta correcta por ejercicio.
-    - La respuesta correcta debe ofrecer una reinterpretación alternativa plausible.
-    - No debe negar lo ocurrido.
-    - No debe minimizar las emociones.
-    - Evitá positivismo exagerado.
-    - Las opciones incorrectas deben ser pensamientos automáticos plausibles.
-    - A medida que aumenta el nivel, las opciones incorrectas deben ser
-      progresivamente más difíciles de distinguir de la correcta.
-    - Evitá suicidio, autolesión, violencia grave, abuso y diagnósticos médicos.
-    - Usá español argentino simple.
-    - "correctas" debe contener el índice de la opción correcta empezando desde 0.
-    """
-
-    response = gemini_client.models.generate_content(
-        model="gemini-3.5-flash-lite",
-        contents=prompt,
-        config={
-            "response_mime_type": "application/json",
-            "response_schema": BatchEjerciciosFamiliaIA,
-        },
-    )
-
-    print("Gemini respondió")
-    print("RAW RESPONSE:")
-    print(response.text)
-
-    batch = BatchEjerciciosFamiliaIA.model_validate_json(
-        response.text
-    )
-
-    niveles = [nivel.model_dump() for nivel in batch.niveles]
-
-    if len(niveles) != 10:
-        raise ValueError(
-            f"Gemini devolvió {len(niveles)} niveles en lugar de 10"
-        )
-
-    for nivel in niveles:
-        validar_nivel_ia(nivel)
-
-    print("Batch de 10 niveles validado")
-
-    return niveles
-
-
-def generar_batch_familia_ia_adaptativo(historial, estado):
-    contexto = estado.get("perfil_contexto", {})
-    genero = estado.get("genero", "no especificado")
-
-    historial_texto = json.dumps(
-        historial,
-        ensure_ascii=False,
-        indent=2,
-    )
-
-    prompt = f"""
-    Generá EXACTAMENTE 10 ejercicios consecutivos de regulación emocional
-    mediante cognitive reappraisal.
-
-    Categoría: Familia
-    Estrategia principal: Reconstrual
-    Tipo: opcion_multiple
-
-    INFORMACIÓN PERSONALIZADA DEL USUARIO:
-    - Género: {genero}
-    - Convivencia: {contexto.get('convivencia', 'No especificado')}
-    - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
-    - Ocupación: {contexto.get('ocupacion', 'No especificado')}
-    - Estado en pareja: {contexto.get('pareja', 'No especificado')}
-
-    El usuario ya realizó ejercicios anteriormente.
-
-    Este fue su desempeño:
-
-    {historial_texto}
-
-    Analizá especialmente:
-    - qué respuestas incorrectas eligió
-    - en qué tipos de situaciones se confundió
-    - qué formas de pensamiento parecen costarle más
-
-    Generá los próximos 10 ejercicios adaptándolos a ese desempeño y a la realidad de su perfil personal.
-
-    Si el usuario se confundió en algún aspecto:
-    - volvé a trabajar ese mismo principio
-    - usá un escenario diferente
-    - no copies literalmente el ejercicio anterior
-
-    Si no tuvo dificultades:
-    - aumentá ligeramente la dificultad
-
-    Los 10 escenarios deben ser diferentes.
-
-    Cada ejercicio debe:
-    - tener exactamente 4 opciones
-    - tener solamente una respuesta correcta
-    - tener una reinterpretación alternativa plausible
-    - no negar lo ocurrido
-    - no minimizar las emociones
-    - evitar positivismo exagerado
-
-    Las opciones incorrectas deben ser pensamientos plausibles.
-
-    Evitá:
-    - suicidio
-    - autolesión
-    - abuso
-    - violencia grave
-    - muerte de familiares
-    - diagnósticos o enfermedades graves
-
-    Usá español argentino simple.
-
-    "correctas" debe contener solamente el índice de la opción correcta,
-    empezando desde 0.
-    """
-
-    response = gemini_client.models.generate_content(
-        model="gemini-3.5-flash-lite",
-        contents=prompt,
-        config={
-            "response_mime_type": "application/json",
-            "response_schema": BatchEjerciciosFamiliaIA,
-        },
-    )
-
-    print("Gemini respondió batch adaptativo")
-
-    batch = BatchEjerciciosFamiliaIA.model_validate_json(
-        response.text
-    )
-
-    niveles = [
-        nivel.model_dump()
-        for nivel in batch.niveles
-    ]
-
-    if len(niveles) != 10:
-        raise ValueError(
-            f"Gemini devolvió {len(niveles)} niveles en lugar de 10"
-        )
-
-    for nivel in niveles:
-        validar_nivel_ia(nivel)
-
-    print("Batch adaptativo de 10 niveles validado")
-
-    return niveles
-    
-
-def validar_nivel_ia(ejercicio):
-
-    if ejercicio["tipo"] != "opcion_multiple":
-        raise ValueError("El tipo debe ser opcion_multiple")
-
-    if ejercicio["estrategia"] != "Reconstrual":
-        raise ValueError("La estrategia debe ser Reconstrual")
-
-    if len(ejercicio["opciones"]) != 4:
-        raise ValueError("El ejercicio debe tener exactamente 4 opciones")
-
-    if len(ejercicio["correctas"]) != 1:
-        raise ValueError("Debe haber exactamente una respuesta correcta")
-
-    indice_correcto = ejercicio["correctas"][0]
-
-    if indice_correcto < 0 or indice_correcto >= len(ejercicio["opciones"]):
-        raise ValueError("El índice de la respuesta correcta no es válido")
-
-    return ejercicio
-
-# ==========================================================
-# --- CONFIGURACIÓN DE SUPABASE ---
-# ----------------------------------------------------------
-# OJO: completar estos 2 valores con los de TU PROYECTO de Supabase antes de
-# desplegar. Se recomienda usar un proyecto de Supabase separado del de la
-# app de Encuesta, porque acá se guardan datos sensibles de salud mental.
-# Corré primero los archivos supabase_usuarios_regulacion.sql,
-# supabase_temas_seguimiento.sql y supabase_reportes_emocionales.sql (en
-# ese orden) en el SQL Editor de ese proyecto.
-# ==========================================================
-SUPABASE_BASE_URL = "https://wtevnqwkvkposusqraph.supabase.co/rest/v1"
-SUPABASE_KEY = "sb_publishable_olUJCGB-IsB7lYI0k3sSuA_Qfej5kmi"
-
-SUPABASE_USUARIOS_URL = f"{SUPABASE_BASE_URL}/usuarios_regulacion"
-SUPABASE_REPORTES_URL = f"{SUPABASE_BASE_URL}/reportes_emocionales"
-SUPABASE_TEMAS_URL = f"{SUPABASE_BASE_URL}/temas_seguimiento"
-SUPABASE_BIENESTAR_URL = f"{SUPABASE_BASE_URL}/chequeos_bienestar"
-SUPABASE_REAPPRAISAL_URL = f"{SUPABASE_BASE_URL}/ejercicios_reappraisal"
-SUPABASE_JUEGOS_REAPPRAISAL_URL = f"{SUPABASE_BASE_URL}/progreso_juegos_reappraisal"
-HEADERS = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json",
-}
-
-# Login con Google (opcional, igual patrón que la app de Encuesta): si estas
-# 3 variables de entorno no están seteadas, el botón de Google directamente
-# no aparece y la app sigue funcionando con el login por mail.
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URL = os.environ.get("GOOGLE_REDIRECT_URL", "")
-
-# ==========================================================
-# --- PALETA DE COLORES ---
-# ----------------------------------------------------------
-# Apps de bienestar "serias" (Calm, Headspace, etc.) evitan el blanco/gris
-# puro y el alto contraste: usan fondos cálidos de baja saturación (crema,
-# no blanco), un color principal frío-suave (azul o verde azulado, asociado
-# a calma/confianza) y como mucho un acento cálido puntual (durazno/dorado
-# apagado), con textos en gris cálido en vez de negro puro. Los rojos se
-# reservan para errores y la pantalla de crisis (ahí el rojo cumple una
-# función real de alerta, no es parte de la paleta "de todos los días").
-# ==========================================================
-COLOR_FONDO = "#E8DBC0"           # crema cálido: fondo de toda la página (más marcado, se nota bien en pantallas OLED)
-COLOR_TARJETA = "#FFFAF0"         # blanco cálido: la tarjeta central de cada pantalla
-COLOR_PRIMARIO = "#3D7A7B"        # verde azulado: color "semilla" del tema (botones, ícono principal)
-COLOR_PRIMARIO_OSCURO = "#2C5F60"
-COLOR_CAJA_SUAVE = "#E4D2AE"      # cajas de contenido (distorsiones, tarjetas de temas)
-COLOR_CAJA_INFO = "#CCE3DD"       # cajas de "recordatorio" (contexto de la vez anterior)
-COLOR_EXITO = "#4F8F6D"           # verde salvia (en vez de verde saturado)
-COLOR_EXITO_CAJA = "#D2E9DA"
-COLOR_DORADO = "#C79433"          # acento cálido puntual (ideas/recomendaciones)
-COLOR_TEXTO_FUERTE = "#352F27"    # reemplaza negro puro
-COLOR_TEXTO_MEDIO = "#665C4C"     # reemplaza GREY_700
-COLOR_TEXTO_SUAVE = "#8A7C68"     # reemplaza GREY_500/600
-
-# ==========================================================
-# --- DETECCIÓN DE RIESGO SUICIDA ---
-# ----------------------------------------------------------
-# Se revisa CADA texto libre que la persona escribe a lo largo de todo el
-# cuestionario (situación, pensamiento, evidencia, pensamiento
-# alternativo, reflexiones), en cualquier paso — la declaración de
-# intención suicida puede aparecer desde el arranque o más adelante. Si
-# aparece, el flujo normal se corta ahí mismo y pasa al flujo de crisis
-# (ver más abajo), sin importar en qué paso estaba.
-# Es un detector simple por frases (no un diagnóstico), pensado para
-# priorizar sensibilidad: preferimos activarlo de más antes que dejar
-# pasar una señal real.
-# ==========================================================
-def _sin_acentos(texto):
-    texto = unicodedata.normalize("NFKD", texto or "")
-    return "".join(c for c in texto if not unicodedata.combining(c))
-
-
-def _normalizar_riesgo(texto):
-    return _sin_acentos((texto or "").strip().lower())
-
-
-FRASES_RIESGO_SUICIDA = [
-    "quiero morir", "quiero morirme", "prefiero estar muerto", "prefiero estar muerta",
-    "no quiero vivir", "no quiero seguir viviendo", "no quiero seguir viva", "no quiero seguir vivo",
-    "no quiero existir", "no quiero estar viva", "no quiero estar vivo",
-    "me quiero matar", "quiero matarme", "matarme de una vez",
-    "quiero suicidarme", "me quiero suicidar", "pensando en suicidarme", "pienso en suicidarme", "pense en suicidarme",
-    "quitarme la vida", "quitarme mi vida", "quitarme la vida de una vez",
-    "terminar con mi vida", "terminar con esta vida", "acabar con mi vida", "acabar con esta vida",
-    "poner fin a mi vida",
-    "no vale la pena seguir viviendo", "no tiene sentido seguir viviendo",
-    "ya no aguanto mas vivir", "ya no aguanto mas seguir viviendo",
-    "mejor estaria muerto", "mejor estaria muerta",
-    "estarian mejor sin mi", "estarian todos mejor sin mi", "todos estarian mejor sin mi",
-    "el mundo estaria mejor sin mi", "si yo no estuviera todo seria mejor",
-    "quiero desaparecer para siempre", "yo desapareciera para siempre", "si yo desapareciera",
-    "no quiero despertar", "no quiero despertarme mas",
-    "tengo un plan para matarme", "como matarme", "como suicidarme",
-    "hacerme dano de verdad", "lastimarme para terminar con esto",
-]
-
-
-def detectar_riesgo_suicida(*textos):
-    for texto in textos:
-        t = _normalizar_riesgo(texto)
-        if not t:
-            continue
-        if any(frase in t for frase in FRASES_RIESGO_SUICIDA):
-            return True
-    return False
-
-
-# ==========================================================
-# --- DETECCIÓN DE RIESGO HACIA TERCEROS ---
-# ----------------------------------------------------------
-# Distinto del riesgo suicida: acá se busca una intención real de
-# lastimar a otra persona, no el miedo obsesivo a hacerlo sin querer
-# (que es justamente el contenido típico de un pensamiento intrusivo de
-# tipo "Harm OCD", y NO debe disparar esto). Por eso las frases usan
-# verbos de intención/plan ("voy a", "quiero", "tengo un plan para"), no
-# de miedo ("puedo", "podría", "sin querer"), que es como está redactado
-# el propio hint de la app para esa situación. Igual que con el riesgo
-# suicida: es un detector simple por frases, no un diagnóstico, pensado
-# para priorizar sensibilidad ante una señal real.
-# ==========================================================
-FRASES_RIESGO_TERCEROS = [
-    "voy a matar a", "quiero matar a", "voy a lastimar a", "quiero lastimar a",
-    "le voy a hacer dano a", "le voy a hacer daño a", "tengo un plan para lastimar",
-    "tengo ganas de matar a", "quiero hacerle dano de verdad a", "quiero hacerle daño de verdad a",
-    "voy a atacar a", "quiero herir a", "voy a herir a", "me quiero vengar de",
-    # Variantes de "tengo un plan para..." con los mismos verbos de arriba
-    # (encontrado con una simulación grande: "tengo un plan para lastimar"
-    # estaba cubierto, pero "tengo un plan para hacerle daño a" —una
-    # frase igual de plausible— no).
-    "tengo un plan para matar a", "tengo un plan para hacerle dano a", "tengo un plan para hacerle daño a",
-    "tengo un plan para atacar a", "tengo un plan para herir a",
-]
-
-
-def detectar_riesgo_terceros(*textos):
-    for texto in textos:
-        t = _normalizar_riesgo(texto)
-        if not t:
-            continue
-        if any(frase in t for frase in FRASES_RIESGO_TERCEROS):
-            return True
-    return False
-
 
 # ==========================================================
 # --- CONTENIDO CLÍNICO (basado en Terapia Cognitiva Conductual) ---
@@ -397,39 +200,12 @@ def detectar_riesgo_terceros(*textos):
 # explicación en criollo para que cualquier persona las entienda sin
 # necesitar formación en psicología.
 # ==========================================================
-DISTORSIONES = [
-    ("Todo o nada", "Ver la situación en blanco o negro, sin grises: \"si no sale perfecto, es un fracaso total\"."),
-    ("Sobregeneralización", "Sacar una conclusión general y permanente a partir de un solo hecho puntual: \"esto siempre me pasa\", \"nunca me sale nada bien\"."),
-    ("Catastrofización", "Pensar que va a pasar lo peor posible, como si fuera casi seguro."),
-    ("Lectura de mente", "Suponer que sabés lo que el otro está pensando de vos, sin haber preguntado."),
-    ("Adivinación del futuro", "Dar por hecho cómo va a salir algo, como si pudieras predecirlo con certeza."),
-    ("Razonamiento emocional", "Creer que algo es cierto solo porque lo sentís así: \"me siento un fracaso, entonces lo soy\"."),
-    ("Debería", "Exigirte (o exigirle a otros) reglas rígidas de cómo \"tendría que\" ser todo."),
-    ("Etiquetado", "Ponerte (o ponerle a alguien) una etiqueta negativa global por un solo error: \"soy un inútil\"."),
-    ("Filtro mental", "Quedarte solo con el detalle negativo de la situación e ignorar todo lo demás."),
-    ("Descalificar lo positivo", "Restarle valor a las cosas buenas que pasan, como si no contaran."),
-    ("Personalización", "Sentirte responsable de algo que no dependía (solo, o para nada) de vos."),
-]
 
 # Un "antídoto" concreto por cada distorsión (técnica estándar de CBT,
 # ej. Burns, "Feeling Good"), para que lo que la persona marca en el
 # checklist (hoy dentro del Paso 3) deje de ser solo reconocerlo y
 # también alimente las recomendaciones finales (Paso 6) y una pista
 # breve antes de escribir el pensamiento alternativo (Paso 5).
-RECOMENDACIONES_POR_DISTORSION = {
-    "Todo o nada": "Ya que notaste que lo estás viendo en blanco o negro: buscá algún punto intermedio, un porcentaje entre 0 y 100 en vez de solo \"perfecto\" o \"fracaso\".",
-    "Sobregeneralización": "Ya que notaste que lo estás generalizando: pensá en alguna vez, aunque sea una sola, en la que no pasó lo que decís que \"siempre\" o \"nunca\" pasa.",
-    "Catastrofización": "Ya que notaste que estás yendo al peor escenario: preguntate cuál es el resultado más probable, no el peor posible.",
-    "Lectura de mente": "Ya que notaste que estás suponiendo lo que otro piensa: considerá si podés simplemente preguntarle, en vez de darlo por hecho.",
-    "Adivinación del futuro": "Ya que notaste que estás dando por segura una predicción: recordá que es una predicción, no un hecho, y las predicciones a veces fallan.",
-    "Razonamiento emocional": "Ya que notaste que estás usando cómo te sentís como prueba: preguntate qué diría la evidencia real, más allá de lo que sentís ahora.",
-    "Debería": "Ya que notaste una regla rígida de \"debería\": probá reemplazarla por \"me gustaría\" o \"preferiría\", y notá si se siente distinto.",
-    "Etiquetado": "Ya que notaste que te (o le) pusiste una etiqueta: describí el hecho puntual en vez de la etiqueta global (\"me equivoqué en esto\" en vez de \"soy un desastre\").",
-    "Filtro mental": "Ya que notaste que te quedaste con el detalle negativo: buscá activamente algo que también haya salido bien en esa misma situación.",
-    "Descalificar lo positivo": "Ya que notaste que le restás valor a lo bueno: anotá algo positivo de esto, por chico que sea, y dejalo contar tanto como lo negativo.",
-    "Personalización": "Ya que notaste que te hacés responsable de algo: separá qué parte dependía realmente de vos y qué parte no.",
-}
-
 
 # ==========================================================
 # --- BANCO DE SITUACIONES PARA "EJERCICIOS DE REAPPRAISAL" ---
@@ -441,118 +217,6 @@ RECOMENDACIONES_POR_DISTORSION = {
 # más ante lo incontrolable) y la técnica de reappraisal más indicada
 # según la evidencia para ese tipo de situación.
 # ==========================================================
-CATEGORIAS_REAPPRAISAL = [
-    {
-        "nombre": "Conflictos interpersonales",
-        "controlabilidad": "Mixta",
-        "tecnica": "Perspectiva de un tercero + reinterpretación",
-        "situaciones": [
-            ("Julieta discutió con su pareja por algo chico (quién lavaba los platos) y quedó un clima incómodo el resto del día.", "Julieta piensa: \"si discutimos por esto, es porque en el fondo no nos entendemos\"."),
-            ("Martín le canceló el plan a su amigo Diego a último momento, por segunda vez seguida.", "Diego piensa: \"le importo menos de lo que yo creía\"."),
-            ("En una reunión familiar, el hermano de Carla hizo un comentario que ella sintió como una crítica encubierta.", "Carla piensa: \"siempre me está juzgando\"."),
-            ("Pablo le pidió a su compañero de casa que ordenara, y al volver encontró todo desordenado otra vez.", "Pablo piensa: \"no le importa nada de lo que le pido\"."),
-        ],
-    },
-    {
-        "nombre": "Trabajo o estudio",
-        "controlabilidad": "Mixta",
-        "tecnica": "Reinterpretación + distanciamiento temporal",
-        "situaciones": [
-            ("La jefa de Sofía le corrigió un informe delante de todos sus compañeros.", "Sofía piensa: \"quedé como una incompetente delante de todos\"."),
-            ("A Andrés se le juntó más trabajo del que puede manejar esta semana.", "Andrés piensa: \"no voy a llegar a nada, esto me supera\"."),
-            ("A Valeria no le fue como esperaba en un examen que venía preparando hace meses.", "Valeria piensa: \"esto confirma que no soy buena para esto\"."),
-            ("Un compañero de Gustavo recibió el reconocimiento que él venía esperando para sí.", "Gustavo piensa: \"nunca van a valorar lo mío\"."),
-        ],
-    },
-    {
-        "nombre": "Autocrítica y errores propios",
-        "controlabilidad": "Alta",
-        "tecnica": "Autodistanciamiento en 3ª persona",
-        "situaciones": [
-            ("Celeste se dio cuenta de que mandó un mail con un error evidente a un cliente importante.", "Celeste piensa: \"soy un desastre, esto no tiene arreglo\"."),
-            ("Ramiro se olvidó de algo que le había prometido a su hija.", "Ramiro piensa: \"no se puede confiar en mí para nada\"."),
-            ("Paula dijo algo en una charla con amigos y se arrepintió apenas salió de su boca.", "Paula piensa: \"quedé como una tonta, seguro todos lo están pensando\"."),
-            ("Hernán siente que quedó atrás comparado con cómo se imaginaba a esta altura de su vida.", "Hernán piensa: \"ya perdí el tiempo, es tarde para cambiar algo\"."),
-        ],
-    },
-    {
-        "nombre": "Rechazo social y comparación",
-        "controlabilidad": "Baja",
-        "tecnica": "Distanciamiento temporal",
-        "situaciones": [
-            ("Noelia publicó algo en redes que le importaba mucho y tuvo muchísima menos repercusión de la que esperaba.", "Noelia piensa: \"a nadie le importa lo que hago\"."),
-            ("Federico vio fotos de una juntada de su grupo de conocidos a la que no lo invitaron.", "Federico piensa: \"me dejaron afuera a propósito\"."),
-            ("Rocío le mandó un mensaje a una amiga hace tres días y todavía no tuvo respuesta.", "Rocío piensa: \"hice algo mal, por eso no me contesta\"."),
-            ("Mirando lo que muestran otros en redes, Sebastián siente que su vida se queda corta.", "Sebastián piensa: \"todos la están pasando mejor que yo\"."),
-        ],
-    },
-    {
-        "nombre": "Dinero y finanzas",
-        "controlabilidad": "Mixta",
-        "tecnica": "Reinterpretación orientada a resolución + distanciamiento temporal",
-        "situaciones": [
-            ("A Mariela se le rompió el auto y tuvo que hacer un gasto grande que no tenía contemplado.", "Mariela piensa: \"nunca voy a poder organizarme con la plata\"."),
-            ("Tomás revisó los gastos del mes y vio que gastó bastante más de lo que planeaba.", "Tomás piensa: \"soy un desastre para manejar el dinero\"."),
-            ("Silvia se enteró de que una excompañera de su edad está mucho mejor económicamente que ella.", "Silvia piensa: \"me quedé atrás, hice todo mal\"."),
-            ("Leo tiene que pedirle ayuda económica a su familia este mes y le da vergüenza.", "Leo piensa: \"esto demuestra que no puedo solo\"."),
-        ],
-    },
-    {
-        "nombre": "Preocupación por la salud",
-        "controlabilidad": "Baja",
-        "tecnica": "Distanciamiento (observador objetivo)",
-        "situaciones": [
-            ("Camila tiene un síntoma nuevo desde hace unos días y todavía no sabe qué es.", "Camila piensa: \"seguro es algo grave\"."),
-            ("El papá de Bruno se hizo un chequeo de rutina y la familia está esperando los resultados.", "Bruno piensa: \"algo malo va a salir, lo presiento\"."),
-            ("Verónica nota que últimamente se cansa más de lo habitual.", "Verónica piensa: \"mi cuerpo ya no da más\"."),
-            ("Un amigo le contó a Facundo una experiencia de salud difícil, y ahora Facundo no deja de pensar en eso.", "Facundo piensa: \"es cuestión de tiempo hasta que me toque a mí\"."),
-        ],
-    },
-    {
-        "nombre": "Pérdidas y finales cotidianos",
-        "controlabilidad": "Baja",
-        "tecnica": "Distanciamiento temporal + autodistanciamiento",
-        "situaciones": [
-            ("Elena terminó una relación de varios años y siente que quedó un vacío.", "Elena piensa: \"nunca voy a encontrar algo así de nuevo\"."),
-            ("Matías se mudó de ciudad por trabajo y extraña cómo era su vida antes.", "Matías piensa: \"dejé atrás lo único bueno que tenía\"."),
-            ("Un proyecto en el que Lucía invirtió mucho tiempo se terminó sin salir como esperaba.", "Lucía piensa: \"perdí años en algo que no sirvió para nada\"."),
-            ("El grupo con el que Marcos se juntaba hace años a jugar al fútbol se disolvió.", "Marcos piensa: \"ya nada va a volver a ser lo mismo\"."),
-        ],
-    },
-    {
-        "nombre": "Presión de tiempo y sobrecarga",
-        "controlabilidad": "Alta",
-        "tecnica": "Reinterpretación + resolución de problemas",
-        "situaciones": [
-            ("Ana tiene el día lleno de cosas por hacer y siente que no va a llegar con nada.", "Ana piensa: \"esto es imposible, me voy a quedar corta en todo\"."),
-            ("Iván intentaba concentrarse en algo importante y lo interrumpieron cuatro veces en una hora.", "Iván piensa: \"así no puedo avanzar en nada\"."),
-            ("Florencia postergó un trámite importante durante semanas y ahora lo tiene encima.", "Florencia piensa: \"soy un desastre organizándome, siempre me pasa lo mismo\"."),
-            ("Ezequiel siente que le dedica todo su tiempo a obligaciones y nada a él.", "Ezequiel piensa: \"mi vida es solo cumplir con cosas\"."),
-        ],
-    },
-    {
-        "nombre": "Imprevistos y decepciones menores",
-        "controlabilidad": "Baja",
-        "tecnica": "Reinterpretación con perspectiva/humor",
-        "situaciones": [
-            ("Juan perdió el tren por un minuto justo el día que tenía una reunión importante.", "Juan piensa: \"siempre me pasa esto a mí\"."),
-            ("El viaje que Daniela venía organizando hace meses se canceló por algo fuera de su control.", "Daniela piensa: \"nada me sale como lo planeo\"."),
-            ("A Cristian se le rompió el lavarropas justo la semana que estaba más ajustado de plata.", "Cristian piensa: \"no puede ser que siempre se rompa algo justo ahora\"."),
-            ("Belén hizo dos horas de fila para un trámite y al llegar le dijeron que le faltaba un papel.", "Belén piensa: \"estoy perdiendo el día por esto\"."),
-        ],
-    },
-    {
-        "nombre": "Incertidumbre y falta de control",
-        "controlabilidad": "Baja",
-        "tecnica": "Distanciamiento temporal",
-        "situaciones": [
-            ("Marina está esperando la respuesta de una entrevista de trabajo, y la decisión no depende de ella.", "Marina piensa: \"no aguanto no saber qué va a pasar\"."),
-            ("Agustín mira las noticias sobre la situación del país y le crece la angustia por el futuro.", "Agustín piensa: \"cada vez va a estar peor, no hay nada que hacer\"."),
-            ("La pareja de Lorena tiene que decidir si acepta un traslado, y esa decisión la afecta de lleno a ella.", "Lorena piensa: \"mi vida depende de algo que no controlo para nada\"."),
-            ("A Nico se le viene un cambio grande y todavía no sabe cómo va a ser.", "Nico piensa: \"no voy a poder manejar lo que sea que pase\"."),
-        ],
-    },
-]
 
 # Ejercicios "inventados" a completar antes de desbloquear "propias".
 # Era 10, después 3, y quedó en 1 (pedido de Gabriel, 2026-07-14): con
@@ -576,56 +240,10 @@ UMBRAL_REAPPRAISAL_PROPIAS = 1
 # 2026-07-17). Paleta y tipografía (Poppins) usadas SOLO en estas
 # pantallas, como identidad propia de este modo de juego.
 # ==========================================================
-MENTO_ROSA = "#FFC7D1"
-MENTO_ROSA_TEXTO = "#F36E86"
-MENTO_VERDE = "#52B788"
-MENTO_VERDE_OSCURO = "#00C49A"
-MENTO_AMARILLO = "#FFC832"
-MENTO_AMARILLO_CLARO = "#FED45F"
-MENTO_CELESTE = "#0096C7"
-MENTO_CELESTE_CAJA = "#C7EAF5"
-MENTO_NARANJA = "#FE814A"
-MENTO_EXITO_JUEGO = "#5CD98C"
-MENTO_ERROR_JUEGO = "#FF6464"
-MENTO_SELECCION_JUEGO = "#F9B702"
-MENTO_FUENTE = "Poppins"
 
-MENTO_CATEGORIAS = [
-    {"clave": "familia", "nombre": "Familia", "color": MENTO_AMARILLO, "icono": ft.Icons.FAMILY_RESTROOM},
-    {"clave": "salud", "nombre": "Salud", "color": MENTO_VERDE, "icono": ft.Icons.FAVORITE},
-    {"clave": "vinculos", "nombre": "Vínculos", "color": MENTO_NARANJA, "icono": ft.Icons.GROUPS},
-    {"clave": "trabajo", "nombre": "Trabajo o estudio", "color": MENTO_CELESTE, "icono": ft.Icons.WORK},
-]
 
 # Explicación de cada estrategia ("¿Sabías que...?" en MENTO), accesible
 # desde el ícono de información de cada nivel.
-MENTO_EXPLICACIONES = {
-    "Reconstrual": (
-        "Reconstrual es una estrategia para regular tus emociones cambiando el enfoque de una situación: "
-        "en vez de quedarte atrapado/a en un detalle que te estresa, ampliás la mirada y la reinterpretás "
-        "desde un contexto más general o más neutral."
-    ),
-    "Repurposing": (
-        "Repurposing es una forma de regular tus emociones cambiando el propósito que le das a una "
-        "situación. En lugar de verla solo como algo molesto o difícil, la reinterpretás como una "
-        "oportunidad: para aprender, practicar paciencia, fortalecer un valor, o crecer de alguna manera."
-    ),
-    "Reappraisal interpersonal": (
-        "El reappraisal interpersonal consiste en reinterpretar lo que otra persona dijo o hizo. No se "
-        "trata de justificar comportamientos dañinos, sino de abrir espacio a interpretaciones más "
-        "realistas y reducir conclusiones automáticas."
-    ),
-    "Reappraisal inventivo": (
-        "El reappraisal inventivo consiste en generar una interpretación nueva, creativa o inesperada "
-        "sobre una situación negativa, para cambiar la emoción que te provoca. No se trata de negar la "
-        "realidad, sino de buscar activamente alternativas, aunque no sean las más obvias."
-    ),
-    "Reinterpretación positiva": (
-        "La reinterpretación positiva busca encontrar un aspecto constructivo o beneficioso dentro de una "
-        "situación difícil. No es negar lo negativo, sino reconocer que puede haber algo bueno mezclado: "
-        "un aprendizaje, una oportunidad, un fortalecimiento personal."
-    ),
-}
 
 # Los 20 escenarios: 4 categorías × 10 niveles. Contenido migrado de MENTO
 # (mismos escenarios, opciones y mensajes de feedback; se corrigió un
@@ -634,792 +252,12 @@ MENTO_EXPLICACIONES = {
 # un índice válido en "correctas", pero con marcar una sola alcanza) o
 # "emparejar" (unís cada pensamiento negativo con su reinterpretación
 # positiva correspondiente, un par a la vez).
-MENTO_NIVELES = {
-    "familia": [
-        {
-            "estrategia": "Reconstrual",
-            "nombre": "Discusión familiar",
-            "tipo": "opcion_multiple",
-            "escenario": [
-                "En la mesa, un familiar te dice: \"Siempre estás en el teléfono, nunca prestás atención\".",
-                "Esto te molesta, porque pensás que te está atacando y no valora que también necesitás tu espacio.",
-            ],
-            "opciones": [
-                "No me soporta y siempre busca criticarme",
-                "Exagera y no tiene razón",
-                "Solo dice eso para dejarme mal frente a los demás",
-                "Quizás está preocupado por nuestra conexión y esto es su manera de expresarlo",
-            ],
-            "correctas": [3],
-            "mensaje_exito": "Reinterpretar la crítica como una oportunidad reduce el malestar y te ayuda a crecer.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-        },
-        {
-            "estrategia": "Repurposing",
-            "nombre": "Cambio de planes",
-            "tipo": "opcion_multiple",
-            "escenario": [
-                "Se cancela un viaje en familia por mal clima.",
-                "Eso te hace sentir muy mal porque era algo que anhelabas bastante.",
-            ],
-            "opciones": [
-                "Mejor cada uno hace lo suyo, ya está todo perdido",
-                "Todo arruinado, el día ya no sirve",
-                "Pasar tiempo en casa jugando juegos de mesa",
-                "Aprovechar para cocinar juntos una comida especial",
-                "No hay nada que pueda reemplazar este plan",
-                "Hacer una tarde de películas en familia",
-            ],
-            "correctas": [2, 3, 5],
-            "mensaje_exito": "Reinterpretar la situación de manera constructiva te ayuda a encontrar alternativas positivas.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-        },
-        {
-            "estrategia": "Reappraisal interpersonal",
-            "nombre": "Gastos en la casa",
-            "tipo": "opcion_multiple",
-            "escenario": ["Mamá/papá está preocupado por un gasto imprevisto en la casa."],
-            "opciones": [
-                "Esto nos enseña a organizarnos mejor",
-                "Bueno, ya está, no hay nada que hacer",
-                "Es un desastre, siempre pasa lo mismo",
-                "No pensemos en eso, ignoremos el problema",
-                "Seguro vamos a tener más gastos así",
-            ],
-            "correctas": [0],
-            "mensaje_exito": "Reinterpretar la crítica como una oportunidad reduce el malestar y te ayuda a crecer.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-        },
-        {
-            "estrategia": "Reinterpretación positiva",
-            "nombre": "Recorte de ingresos",
-            "tipo": "emparejar",
-            "escenario": [
-                "La familia recibe la noticia de un recorte de ingresos.",
-                "Aparecen tres pensamientos automáticos negativos: uní cada uno con su reinterpretación positiva.",
-            ],
-            "negativos": ["Esto destruye nuestra vida", "Nunca vamos a poder salir adelante", "Todo empeora"],
-            "positivos": [
-                "Vamos a aprender a organizar mejor los gastos",
-                "Podemos apoyarnos más como familia",
-                "Quizás encontremos formas nuevas de resolver juntos",
-            ],
-            "pares_correctos": [(0, 1), (1, 0), (2, 2)],
-            "mensaje_exito": "Pudiste transformar un pensamiento negativo en uno más realista y positivo. Ese es un gran paso para cuidar tu bienestar emocional.",
-            "mensaje_error": "Esa combinación no es la correcta — fijate qué reinterpretación responde mejor a ese pensamiento.",
-        },
-        {
-            "estrategia": "Reconstrual",
-            "nombre": "Consejo a tu hermano",
-            "tipo": "opcion_multiple",
-            "escenario": ["Tu hermano/a no consiguió una beca a la que había aplicado y te pide consejo."],
-            "opciones": [
-                "Es cierto, el mercado laboral es imposible",
-                "Una negativa no define tu camino; esto te ayuda a ver qué mejorar",
-                "Quizás esta experiencia te preparó para la próxima entrevista",
-                "No le des importancia, ya fue",
-                "Podemos revisar juntos tu CV o practicar para la próxima, no estás solo/a",
-                "Si no te tomaron, seguramente algo hiciste mal",
-            ],
-            "correctas": [1, 2, 4],
-            "mensaje_exito": "Reinterpretar la crítica como una oportunidad reduce el malestar y te ayuda a crecer.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-        },
-    ],
-    "salud": [
-        {
-            "estrategia": "Reconstrual",
-            "nombre": "Sala de espera",
-            "tipo": "opcion_multiple",
-            "escenario": ["Estás en una sala de espera hospitalaria con otros pacientes. Parece que hay mucha demora."],
-            "opciones": [
-                "Estoy cuidando mi salud",
-                "Aprovecho para descansar y revisar mensajes",
-                "Voy a perder mucho tiempo inútilmente",
-            ],
-            "correctas": [0, 1],
-            "mensaje_exito": "El reappraisal por reconstrual consiste en reinterpretar la situación de una manera alternativa y más realista, reduciendo la reacción emocional automática.",
-            "mensaje_error": "Esta interpretación aumenta la emoción negativa y no es constructiva. La idea es encontrar una perspectiva más positiva y útil de la situación.",
-        },
-        {
-            "estrategia": "Repurposing",
-            "nombre": "Noticia médica",
-            "tipo": "opcion_multiple",
-            "escenario": ["Aparece una notificación médica: \"Colesterol alto detectado\"."],
-            "opciones": [
-                "Todo va a empeorar a partir de ahora",
-                "Esto arruina mi salud para siempre",
-                "Ya no tiene sentido intentar mejorar",
-                "Puedo hacer cambios a tiempo",
-                "Esto me motiva a moverme más y cuidarme",
-                "No hay nada que pueda hacer",
-            ],
-            "correctas": [3, 4],
-            "mensaje_exito": "Cambiar la meta original por una alternativa valiosa ayuda a mantener el bienestar y reduce el impacto emocional.",
-            "mensaje_error": "Parece difícil ver alternativas cuando estamos decepcionados. Buscar un nuevo propósito para ese tiempo puede aliviar la reacción negativa.",
-        },
-        {
-            "estrategia": "Reconstrual",
-            "nombre": "Noticia mundial",
-            "tipo": "opcion_multiple",
-            "escenario": [
-                "Titular negativo: \"Se intensifica la pandemia\". Esto te hace sentir frustrado/a y pesimista, "
-                "porque pensás que el mundo nunca va a mejorar."
-            ],
-            "opciones": [
-                "Nada de lo que haga sirve para protegerme",
-                "Esto demuestra que todo va a seguir empeorando sin remedio",
-                "Esto une a la comunidad científica",
-                "Me recuerda la importancia de cuidar a mis seres queridos",
-                "No hay manera de que el mundo se recupere de algo así",
-            ],
-            "correctas": [2, 3],
-            "mensaje_exito": "El reappraisal por reconstrual consiste en reinterpretar la situación de una manera alternativa y más realista, reduciendo la reacción emocional automática.",
-            "mensaje_error": "Esta interpretación aumenta la emoción negativa y no es constructiva. La idea es encontrar una perspectiva más positiva y útil de la situación.",
-        },
-        {
-            "estrategia": "Repurposing",
-            "nombre": "Hábitos",
-            "tipo": "emparejar",
-            "escenario": ["Aparecen tres pensamientos automáticos sobre cambiar de hábitos: uní cada uno con su reinterpretación positiva."],
-            "negativos": ["No tengo tiempo.", "Me falta motivación.", "No sé por dónde empezar."],
-            "positivos": [
-                "Elegir un hábito pequeño hoy es mejor que no empezar.",
-                "Puedo empezar con solo 10 minutos de caminata diaria.",
-                "Un recordatorio de respiración cada tanto ya reduce el estrés.",
-            ],
-            "pares_correctos": [(0, 1), (1, 2), (2, 0)],
-            "mensaje_exito": "Pudiste transformar preocupaciones sobre hábitos en reinterpretaciones positivas. Ese es un gran paso para cuidar tu salud.",
-            "mensaje_error": "Esa combinación no es la correcta — fijate qué reinterpretación responde mejor a ese pensamiento.",
-        },
-        {
-            "estrategia": "Reappraisal inventivo",
-            "nombre": "Dolor de cabeza",
-            "tipo": "opcion_multiple",
-            "escenario": ["Te duele la cabeza y estás cansado/a."],
-            "opciones": [
-                "Este dolor arruina por completo mi jornada",
-                "Mi cuerpo me pide descansar",
-                "Quizás solo necesito hidratarme mejor",
-                "Seguro que me voy a sentir peor todo el día",
-                "Es una señal para bajar el ritmo",
-                "No hay nada que pueda hacer para mejorar",
-            ],
-            "correctas": [1, 2, 4],
-            "mensaje_exito": "Cambiar la meta original por una alternativa valiosa ayuda a mantener el bienestar y reduce el impacto emocional.",
-            "mensaje_error": "Parece difícil ver alternativas cuando estamos decepcionados. Buscar un nuevo propósito para ese tiempo puede aliviar la reacción negativa.",
-        },
-    ],
-    "vinculos": [
-        {
-            "estrategia": "Reconstrual",
-            "nombre": "Mensaje sin respuesta",
-            "tipo": "opcion_multiple",
-            "escenario": [
-                "Ves la pantalla de chat: \"Visto a las 17:05\" y no llega ninguna respuesta.",
-                "Sentís ansiedad o molestia porque pensás que la otra persona te está ignorando.",
-            ],
-            "opciones": [
-                "Está ocupado/a y no pudo responder todavía",
-                "Seguro que todo va a terminar saliendo perfecto gracias a esto",
-                "Es obvio que me está evitando y debería preocuparme más",
-                "Voy a distraerme y no pensar en esto para no sentir nada",
-            ],
-            "correctas": [0],
-            "mensaje_exito": "El reappraisal por reconstrual consiste en reinterpretar la situación de una manera alternativa y más realista, reduciendo la reacción emocional automática.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-            "mensajes_error_opcion": {
-                1: "Esta opción busca encontrar beneficios. Es útil en otros contextos, pero acá el objetivo es reinterpretar la situación, no buscar un lado positivo.",
-                2: "Esta interpretación aumenta la emoción negativa y no es un reappraisal. La idea del ejercicio es abrir posibilidades flexibles, no asumir lo peor.",
-                3: "Esto no es reappraisal. La supresión intenta no sentir, pero no cambia el significado de la situación. Reappraisal busca reinterpretarla para reducir la carga emocional.",
-            },
-        },
-        {
-            "estrategia": "Repurposing",
-            "nombre": "Cita cancelada",
-            "tipo": "opcion_multiple",
-            "escenario": [
-                "Recibís la notificación: \"Lo siento, no voy a poder ir hoy\".",
-                "Sentís decepción y pensás que el día está arruinado.",
-            ],
-            "opciones": [
-                "Aprovecho la tarde para descansar y recargar energía",
-                "Todo arruinado, ya no sirve el día",
-                "Puedo usar este tiempo para avanzar en algo que me importa",
-                "No voy a pensar en esto, me distraigo y ya",
-                "Tal vez puedo hacer algo que venía postergando y me haría bien",
-                "Seguro lo canceló porque ya no le interesa verme",
-            ],
-            "correctas": [0, 2, 4],
-            "mensaje_exito": "Cambiar la meta original por una alternativa valiosa ayuda a mantener el bienestar y reduce el impacto emocional.",
-            "mensaje_error": "Parece difícil ver alternativas cuando estamos decepcionados. Buscar un nuevo propósito para ese tiempo puede aliviar la reacción negativa.",
-        },
-        {
-            "estrategia": "Reconstrual",
-            "nombre": "Amigo distante",
-            "tipo": "opcion_multiple",
-            "escenario": ["Un amigo/a tuyo está más distante que de costumbre y no sabés bien por qué."],
-            "opciones": [
-                "No le importo, me está ignorando",
-                "Capaz está abrumado/a o pendiente de algo importante",
-                "Lo hace para molestarme",
-            ],
-            "correctas": [1],
-            "mensaje_exito": "Esta respuesta ayuda a reinterpretar la situación como una mala coincidencia específica en lugar de una falla personal.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-            "mensajes_error_opcion": {
-                0: "Evadir no es una buena forma de manejar lo que a uno le pasa, es preferible trabajarlo para estar mejor preparado/a.",
-            },
-        },
-        {
-            "estrategia": "Reinterpretación positiva",
-            "nombre": "Discusión de pareja",
-            "tipo": "emparejar",
-            "escenario": ["Aparecen tres pensamientos automáticos tras una discusión de pareja: uní cada uno con su reinterpretación positiva."],
-            "negativos": [
-                "Esto demuestra que no le importo.",
-                "Siempre pasa lo mismo, seguro lo hizo a propósito.",
-                "Nunca me presta atención.",
-            ],
-            "positivos": [
-                "Un malentendido no define toda la relación.",
-                "Tal vez solo se olvidó, no es falta de amor.",
-                "Discutir también significa que la relación nos importa.",
-            ],
-            "pares_correctos": [(0, 2), (1, 0), (2, 1)],
-            "mensaje_exito": "Pudiste transformar un pensamiento negativo en uno más realista y positivo. Ese es un gran paso para cuidar tu bienestar emocional.",
-            "mensaje_error": "Esa combinación no es la correcta — fijate qué reinterpretación responde mejor a ese pensamiento.",
-        },
-        {
-            "estrategia": "Repurposing",
-            "nombre": "Apoyo a un amigo",
-            "tipo": "opcion_multiple",
-            "escenario": ["Un amigo/a te escribe: \"Me siento re mal, nadie me entiende\"."],
-            "opciones": [
-                "Entiendo que duela, es horrible sentirse solo/a. Buscar apoyo ya muestra tu fortaleza",
-                "Y... si nadie te entiende, es porque explicás mal las cosas",
-                "Bueno, no debe ser tan grave, distraete y ya",
-                "A todos les pasa, no tenés por qué sentirte así",
-                "Acá estoy. A veces sentirse incomprendido/a no significa que estés solo/a; podemos pensar juntos qué necesitás",
-                "Lo que sentís es válido. A veces hablarlo con alguien más ayuda a ver opciones que no se notan ahora",
-            ],
-            "correctas": [0, 4, 5],
-            "mensaje_exito": "Cambiar la meta original por una alternativa valiosa ayuda a mantener el bienestar y reduce el impacto emocional.",
-            "mensaje_error": "Parece difícil ver alternativas cuando estamos decepcionados. Buscar un nuevo propósito para ese tiempo puede aliviar la reacción negativa.",
-        },
-    ],
-    "trabajo": [
-        {
-            "estrategia": "Reconstrual",
-            "nombre": "Feedback de tu jefe/profesor",
-            "tipo": "opcion_multiple",
-            "escenario": [
-                "Tu jefe/profesor dice: \"Este trabajo está lleno de errores, no parece que le hayas dedicado esfuerzo\".",
-                "Esto te hace sentir mal.",
-            ],
-            "opciones": [
-                "Si el jefe/profesor no reconoce tu trabajo, tu trabajo debe haber sido poco valioso",
-                "Como el jefe/profesor piensa que te esforzaste poco, tu esfuerzo real es irrelevante",
-                "Aunque no te hayan valorado como esperabas, los errores cometidos te van a servir para mejorar",
-                "Vos sabés el esfuerzo que pusiste en esto, y que no te lo reconozcan no le resta valor",
-            ],
-            "correctas": [2, 3],
-            "mensaje_exito": "Reinterpretar la crítica como una oportunidad reduce el malestar y te ayuda a crecer.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-        },
-        {
-            "estrategia": "Repurposing",
-            "nombre": "Plan B",
-            "tipo": "opcion_multiple",
-            "escenario": ["Sacaste una nota baja en un examen que venías preparando."],
-            "opciones": [
-                "Soy un fracaso",
-                "Esto demuestra que el esfuerzo no sirve",
-                "Me cuesta pero puedo aprender",
-                "Aprendí qué temas reforzar para la próxima",
-                "Al menos tengo una base para avanzar",
-                "Siempre me va mal en todo",
-            ],
-            "correctas": [2, 3, 4],
-            "mensaje_exito": "Detectar cómo te hablás es el primer paso para cambiarlo.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-        },
-        {
-            "estrategia": "Reappraisal interpersonal",
-            "nombre": "Amigo desanimado",
-            "tipo": "opcion_multiple",
-            "escenario": ["Un amigo/a tuyo no consiguió una beca a la que había aplicado y está desanimado/a."],
-            "opciones": [
-                "Sí, es injusto, quizás no vale la pena seguir intentando",
-                "Quizás esta no era la beca adecuada, podés aplicar a otra con más chances",
-                "Tranquilo/a, olvidate del tema y no pienses más",
-            ],
-            "correctas": [1],
-            "mensaje_exito": "Esta respuesta ayuda a reinterpretar la situación como una mala coincidencia específica en lugar de una falla personal.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-            "mensajes_error_opcion": {
-                0: "Evadir no es una buena forma de manejar lo que a uno le pasa, es preferible trabajarlo para estar mejor preparado/a.",
-            },
-        },
-        {
-            "estrategia": "Reinterpretación positiva",
-            "nombre": "Recorte de personal",
-            "tipo": "emparejar",
-            "escenario": ["Aparecen cuatro pensamientos automáticos tras un recorte de personal: uní cada uno con su reinterpretación positiva."],
-            "negativos": ["Voy a perder mi trabajo", "Es el final de mi carrera", "Todo está perdido", "Me voy a quedar sin plata"],
-            "positivos": [
-                "Tengo ahorros. Voy a aguantar hasta conseguir otro",
-                "Es momento de actualizar mis habilidades",
-                "Voy a aprovechar para buscar nuevas oportunidades laborales",
-                "Es un cambio que abre nuevas oportunidades",
-            ],
-            "pares_correctos": [(0, 2), (1, 1), (2, 3), (3, 0)],
-            "mensaje_exito": "Pudiste transformar un pensamiento negativo en uno más realista y positivo. Ese es un gran paso para cuidar tu bienestar emocional.",
-            "mensaje_error": "Esa combinación no es la correcta — fijate qué reinterpretación responde mejor a ese pensamiento.",
-        },
-        {
-            "estrategia": "Repurposing",
-            "nombre": "Proyecto grupal",
-            "tipo": "opcion_multiple",
-            "escenario": ["Un proyecto grupal no salió como esperaban."],
-            "opciones": [
-                "Mejoramos aunque no llegamos al objetivo",
-                "Fue un desastre total, no sirve para nada",
-                "Seguro el profesor nos tiene bronca",
-                "No aprendimos nada, solo perdimos tiempo",
-                "No voy a trabajar en grupos nunca más",
-                "Aprendí a coordinar mejor en equipo",
-            ],
-            "correctas": [0, 5],
-            "mensaje_exito": "Detectar cómo te hablás es el primer paso para cambiarlo.",
-            "mensaje_error": "Esa interpretación aumenta la frustración.",
-        },
-    ],
-}
-
-
-def calcular_distorsiones_frecuentes(reportes, top_n=3):
-    # Cuenta cuántas veces aparece cada distorsión marcada a lo largo de
-    # TODOS los reportes de la persona (no por tema puntual), para mostrar
-    # un patrón general en el resumen del historial.
-    conteo = {}
-    for rep in reportes:
-        texto = rep.get("distorsiones") or ""
-        for nombre in [n.strip() for n in texto.split(",") if n.strip()]:
-            conteo[nombre] = conteo.get(nombre, 0) + 1
-    return sorted(conteo.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
-
-
-# ==========================================================
-# --- COMPARTIR EL HISTORIAL ---
-# ----------------------------------------------------------
-# Primera versión, sin backend propio para compartir: arma una planilla
-# (CSV) descargable con todo el historial, y un resumen de texto corto
-# para compartir directo por WhatsApp/mail (con el propio botón de
-# WhatsApp/mail del celular, no se manda nada automáticamente — la
-# persona elige el destinatario y confirma el envío ella misma). Cuando
-# haya un backend propio (Supabase configurado del todo), esto se puede
-# reemplazar por un link compartible de verdad.
-# ==========================================================
-def generar_csv_historial(reportes):
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(["Fecha", "Situación", "Tipo de situación", "Emoción", "Intensidad (0-10)", "% inicial", "% final", "Pensamiento alternativo / compromiso"])
-    for rep in sorted(reportes, key=lambda x: x.get("fecha") or ""):
-        writer.writerow([
-            (rep.get("fecha") or "")[:10],
-            rep.get("situacion") or "",
-            rep.get("tipo_situacion") or "",
-            rep.get("emocion_inicial") or "",
-            rep.get("intensidad_inicial", ""),
-            rep.get("creencia_inicial_pct", ""),
-            rep.get("creencia_final_pct", ""),
-            rep.get("pensamiento_alternativo") or "",
-        ])
-    return buffer.getvalue()
-
-
-def generar_texto_resumen_historial(reportes, maximo=15):
-    # Se limita a los últimos registros para que el link de WhatsApp/mail
-    # no quede demasiado largo (los enlaces muy extensos pueden fallar).
-    ordenados = sorted(reportes, key=lambda x: x.get("fecha") or "", reverse=True)[:maximo]
-    ordenados.reverse()
-    lineas = ["Mi evolución en DRE:", ""]
-    for rep in ordenados:
-        fecha = (rep.get("fecha") or "")[:10]
-        situ = (rep.get("situacion") or "")[:60]
-        etiqueta = "impulso" if rep.get("tipo_situacion") == TIPO_OBSESION else "creencia"
-        lineas.append(f"{fecha} — {situ}: {etiqueta} {rep.get('creencia_inicial_pct')}% → {rep.get('creencia_final_pct')}%")
-    return "\n".join(lineas)
 
 
 # Banco de recomendaciones conductuales (activación conductual): actividades
 # concretas y de bajo costo, elegidas según la emoción predominante. Se
 # mantienen fijas (no generadas libremente) para asegurar que siempre estén
 # basadas en evidencia y sean seguras.
-RECOMENDACIONES_POR_EMOCION = {
-    "Tristeza": [
-        "Elegí una actividad chica que antes disfrutabas y hacela hoy, aunque no tengas muchas ganas (el ánimo suele mejorar después de la acción, no antes).",
-        "Contactá a una persona con la que tengas buena relación, aunque sea un mensaje corto.",
-        "Salí a caminar 15-20 minutos al aire libre.",
-        "Anotá una tarea chica y concreta que puedas terminar hoy, para tener una sensación de logro.",
-        "Exponete un rato a la luz del sol o abrí las cortinas/ventanas de tu casa.",
-    ],
-    "Ansiedad": [
-        "Hacé un ejercicio de respiración lenta: inhalar 4 segundos, sostener 4, exhalar 6, repetir 5 veces.",
-        "Escribí qué es lo peor que podría pasar realmente, y qué harías vos si pasara (para bajar la incertidumbre).",
-        "Postergá la preocupación a un horario fijo del día (20 minutos), en vez de darle vueltas todo el día — no a todos les funciona igual, pero vale la pena probarlo.",
-        "Hacé algo con las manos que requiera atención (cocinar, ordenar, dibujar) para salir del ciclo de pensamientos que se repiten.",
-        "Movete: una caminata rápida o algo de actividad física ayuda a bajar la activación física de la ansiedad.",
-    ],
-    "Enojo": [
-        "Antes de responder o actuar, esperá al menos 10 minutos y alejate físicamente de la situación si podés.",
-        "Escribí lo que te pasó y por qué te enojó, sin mostrárselo a nadie, para bajar la intensidad antes de decidir qué hacer.",
-        "Hacé alguna actividad física breve (caminar rápido, estirar, ejercicio) para descargar la tensión del cuerpo.",
-        "Pensá qué le dirías a un amigo que te cuenta la misma situación, y probá aplicarte ese mismo consejo.",
-    ],
-    "Culpa": [
-        "Escribí qué parte de lo que pasó dependía realmente de vos, y qué parte no.",
-        "Si corresponde, pensá en una acción concreta de reparación que puedas hacer (pedir disculpas, aclarar algo, ayudar).",
-        "Preguntate qué le dirías a un amigo que se siente igual de culpable por algo parecido.",
-    ],
-    "Vergüenza": [
-        "Contale lo que te pasó a alguien de confianza: la vergüenza suele bajar mucho cuando se comparte en vez de guardarla.",
-        "Recordá una situación parecida que le haya pasado a otra persona, y cómo la viste vos desde afuera (probablemente con más comprensión que con vos mismo/a).",
-        "Hacé algo que te conecte con tus valores o con algo que te haga sentir bien con vos mismo/a hoy.",
-    ],
-    "General": [
-        "Salí a caminar al aire libre al menos 15 minutos.",
-        "Contactá a alguien de confianza, aunque sea con un mensaje corto.",
-        "Elegí una actividad chica y concreta que puedas terminar hoy.",
-        "Hacé un ejercicio de respiración lenta durante 2-3 minutos.",
-    ],
-}
-
-# Recomendaciones específicas para duelo/pérdida (distintas de las de
-# "Tristeza" en general): en vez de activación conductual estándar,
-# apuntan a permitir el proceso de duelo, mantener el vínculo de otra
-# forma (memoria) y sostener rutinas básicas, con apoyo social y
-# profesional si el dolor se vuelve muy difícil de sobrellevar.
-RECOMENDACIONES_DUELO = [
-    "Permitite sentir lo que sientas, sin apurarte a \"estar bien\": el duelo no tiene un tiempo correcto ni una forma única de vivirse.",
-    "Buscá un momento para recordar a esa persona de una forma que te haga bien: mirar fotos, escuchar algo que le gustaba, escribirle una carta. Seguir sintiéndola cerca, o hablarle, no es quedarse pegado/a — es parte de cómo muchas personas atraviesan el duelo.",
-    "Está bien reírte, distraerte o disfrutar de algo aunque estés en duelo: no significa que quieras menos a esa persona ni que la estés dejando atrás.",
-    "Apoyate en tu entorno, aunque sea con algo chico: contarle a alguien de confianza cómo te sentís hoy.",
-    "Si podés, sostené alguna rutina básica (comer, dormir, algo de movimiento), aunque todo lo demás esté difícil.",
-    "Si esto viene pasando hace más de un año y el dolor sigue tan intenso como al principio, o evitás por completo pensar en esto o hablar de eso, buscar acompañamiento profesional en duelo puede ayudar mucho — no hace falta atravesarlo en soledad.",
-]
-
-# Recomendaciones para un diagnóstico/noticia de salud ya confirmada:
-# apuntan a procesar la noticia, apoyarse en el equipo médico y en el
-# entorno, y sostener rutinas, en vez de "activación conductual" genérica.
-RECOMENDACIONES_DIAGNOSTICO = [
-    "Date tiempo para procesar la noticia: no hace falta tener todo resuelto o entendido de entrada.",
-    "Buscar información confiable sobre tu diagnóstico (con tu equipo médico, o fuentes serias) puede bajar la incertidumbre y ayudarte a sentir más manejo de la situación.",
-    "Anotá las dudas que te vayan surgiendo para tu próxima consulta médica, así no se te escapan en el momento.",
-    "Apoyate en las personas de tu entorno, o en grupos de personas que ya atravesaron algo parecido: suelen aportar algo que nadie más puede darte, la experiencia de haber pasado por esto.",
-    "Un ejercicio breve de respiración lenta o de atención al momento presente, unos minutos cuando lo necesites, tiene buen respaldo para bajar la ansiedad que trae un diagnóstico así.",
-    "Si podés, sostené alguna rutina básica (comer, dormir, algo de movimiento) mientras te reacomodás a esta noticia.",
-    "Si esta noticia se te hace difícil de sobrellevar solo/a, o sentís que te está costando sostener tu día a día desde hace semanas, buscar acompañamiento psicológico específico puede ayudar mucho — no hace falta atravesarlo en soledad.",
-]
-
-# Recomendaciones para pensamientos obsesivos / compulsiones (tipo TOC):
-# basadas en Exposición con Prevención de Respuesta (ERP), el tratamiento
-# de primera línea. Apuntan a tolerar el malestar sin hacer la
-# compulsión, no a convencerse de que el pensamiento es falso.
-RECOMENDACIONES_OBSESION = [
-    "El contenido de estos pensamientos, por más feo, violento o raro que sea, no dice nada de vos ni predice lo que vas a hacer — es parte del patrón, no una señal de alarma sobre tu carácter.",
-    "Cada vez que lográs demorar o no hacer la compulsión, aunque sea un poco, le enseñás a tu cabeza que puede tolerar esa incomodidad sin necesitar el ritual.",
-    "Si podés, evitá pedirle a alguien que te tranquilice sobre esto (y evitá autoconvencerte buscando \"pruebas\"): calma por un rato, pero suele hacer que el impulso vuelva más fuerte después.",
-    "Cuando aparezca el impulso, probá \"surfear la ola\": notá cómo sube, se mantiene un rato y baja solo si no lo alimentás con la acción — aunque ahora cueste creerlo.",
-    "Anotá cada vez que lograste resistir la compulsión, por poco que sea — es una victoria real, aunque el pensamiento haya seguido apareciendo.",
-    "Si esto pasa seguido y te complica el día a día, un tratamiento específico (Exposición con Prevención de Respuesta, con un profesional especializado en este tipo de pensamientos y compulsiones) funciona mucho mejor que intentar resolverlo en soledad.",
-]
-
-# ==========================================================
-# --- ÚLTIMO CONSEJO ADAPTADO A SI YA ESTÁ EN TRATAMIENTO ---
-# ----------------------------------------------------------
-# El último consejo de duelo, diagnóstico y pensamientos repetitivos
-# invita a buscar ayuda profesional. Si la persona ya cargó en su
-# perfil que está en tratamiento, no tiene sentido sugerirle "buscar"
-# algo que ya tiene — tiene más sentido invitarla a llevar esto a su
-# psicólogo/a o psiquiatra. Estas listas quedan igual (se siguen
-# usando tal cual en la biblioteca de Consejos, que no sabe si hay una
-# persona logueada en tratamiento); solo se reemplaza el último ítem al
-# armar las recomendaciones de un reporte puntual, en
-# mostrar_paso_recomendaciones.
-# ==========================================================
-FRASE_PROFESIONAL_DUELO_EN_TRATAMIENTO = "Ya que estás en tratamiento, esto puede ser algo importante para llevarle a tu psicólogo/a o psiquiatra — no hace falta atravesarlo en soledad."
-FRASE_PROFESIONAL_DIAGNOSTICO_EN_TRATAMIENTO = "Ya que estás en tratamiento, esto también puede ser algo para llevarle a tu psicólogo/a o psiquiatra, además de tu equipo médico — no hace falta atravesarlo en soledad."
-FRASE_PROFESIONAL_OBSESION_EN_TRATAMIENTO = "Ya que estás en tratamiento, vale la pena sumar esto a la conversación con tu psicólogo/a o psiquiatra — un tratamiento específico como Exposición con Prevención de Respuesta funciona mucho mejor armado junto a un profesional."
-
-
-def recomendaciones_con_tratamiento(lista_base, frase_en_tratamiento, en_tratamiento):
-    if en_tratamiento == "Sí":
-        return lista_base[:-1] + [frase_en_tratamiento]
-    return lista_base
-
-
-def mezclar_recomendaciones(lista, mantener_ultima=False):
-    # Sin esto, alguien que retoma el mismo tema varias veces ve siempre
-    # las mismas sugerencias en el mismo orden. Mezclar el orden en cada
-    # sesión (sin agregar ni sacar contenido) alcanza para que no se
-    # sienta repetitivo. En duelo/diagnóstico/TOC la última línea es el
-    # cierre hacia ayuda profesional (o su versión adaptada si ya está en
-    # tratamiento) y queda mejor siempre al final, no mezclada en el medio.
-    if not lista:
-        return lista
-    if mantener_ultima and len(lista) > 1:
-        cuerpo = list(lista[:-1])
-        random.shuffle(cuerpo)
-        return cuerpo + [lista[-1]]
-    resultado = list(lista)
-    random.shuffle(resultado)
-    return resultado
-
-
-# ==========================================================
-# --- TIPOS DE CONSEJO FINAL: CBT o BUDISTA TIBETANO ---
-# ----------------------------------------------------------
-# Al final, la persona puede elegir entre un consejo de Terapia Cognitivo
-# Conductual (los bancos de arriba) o uno inspirado en la tradición
-# budista tibetana. El contenido está basado en prácticas y enseñanzas
-# reales de esa tradición, pero el texto que ve la persona NO nombra
-# técnicas, autores ni términos en tibetano/sánscrito (la mayoría de la
-# gente no los conoce, y usarlos sin explicación no suma nada) — se
-# describe directamente la práctica en criollo, de forma pragmática.
-# Fuentes de referencia (para mantenimiento futuro, no se muestran en la
-# app):
-# - Respiración de "dar y recibir" (inhalar el malestar, exhalar alivio):
-#   práctica de "tonglen", tradición de entrenamiento mental (lojong)
-#   tibetano, popularizada en occidente por Pema Chödrön.
-# - Hablarse con calidez ("maitri" / amistad incondicional hacia uno
-#   mismo): mismo origen; converge además con la evidencia (no budista)
-#   de la autocompasión de Kristin Neff, con ensayos randomizados que
-#   muestran menos ansiedad/depresión/estrés tras practicarla.
-# - Los estados emocionales cambian con el tiempo (impermanencia):
-#   enseñanza central budista, usada acá como reencuadre cognitivo, no
-#   como doctrina.
-# - Quedarse con la incomodidad en vez de huir de ella / tolerar la
-#   inestabilidad: enseñanza de Pema Chödrön (maestra budista tibetana).
-# - La paciencia como respuesta al enojo, y notar el costo del enojo
-#   antes de actuar: capítulo sobre la paciencia de Shantideva, texto
-#   clásico (s. VIII) con enorme influencia en las 4 escuelas del budismo
-#   tibetano.
-# - Diferenciar el arrepentimiento (reconocer el error y reparar) de la
-#   culpa/vergüenza que se vuelve maltrato hacia uno mismo, y los 4 pasos
-#   para trabajar un error (reconocer, proponerse no repetirlo, reparar,
-#   apoyarse en algo que dé fuerza): los "cuatro poderes" del budismo
-#   tibetano para trabajar acciones de las que uno se arrepiente.
-# - "Si hay solución no hace falta angustiarse, si no la hay, angustiarse
-#   no ayuda": enseñanza clásica citada tanto por Shantideva como por el
-#   Dalai Lama sobre cómo relacionarse con una dificultad de salud.
-# ==========================================================
-TIPO_RECOMENDACION_CBT = "cbt"
-TIPO_RECOMENDACION_BUDISTA = "budista"
-
-RECOMENDACIONES_BUDISTA_POR_EMOCION = {
-    "Tristeza": [
-        "Probá esto: al inhalar, aceptá esta tristeza tal como es, sin empujarla lejos; al exhalar, date a vos mismo/a un poco de alivio y calma.",
-        "Hablate con la misma calidez con la que le hablarías a alguien que querés mucho, en vez de exigirte o retarte.",
-        "Los estados de ánimo cambian con el tiempo, como el clima: este tampoco se va a quedar igual para siempre.",
-        "En vez de pelear contra la tristeza o distraerte todo el tiempo de ella, probá quedarte un momento con lo que sentís, sin juzgarlo.",
-        "Dedicá unos minutos a sentarte en silencio y seguir tu respiración, dejando que la tristeza esté ahí sin tener que resolverla ya mismo.",
-    ],
-    "Ansiedad": [
-        "La ansiedad muchas veces es la sensación de no tener nada firme bajo los pies. En vez de buscar certezas que no existen, a veces ayuda más quedarte un momento con esa inestabilidad, sin pelear contra ella.",
-        "Probá esto: al inhalar, aceptá el miedo tal como es; al exhalar, date a vos mismo/a un poco de espacio y calma.",
-        "El miedo suele aparecer cuando algo nos importa de verdad — no siempre es señal de que algo esté mal.",
-        "Volvé la atención a tu respiración: contá 4 al inhalar y 6 al exhalar, dejando que la mente se aquiete de a poco.",
-        "Es normal que la mente salte de un pensamiento a otro sin parar — no hace falta que se quede del todo quieta para que estés bien.",
-    ],
-    "Enojo": [
-        "Un solo momento de enojo puede opacar mucho de lo bueno que veníamos construyendo — no se trata de reprimirlo, sino de no dejar que decida por vos.",
-        "Ser paciente no es lo mismo que no hacer nada: si hay algo para resolver, podés hacerlo, pero desde la calma en vez de la reactividad.",
-        "Antes de actuar, notá qué se siente en el cuerpo cuando aparece el enojo — esa pausa de un instante ya ayuda a no reaccionar de manera impulsiva.",
-        "Probá esto: al inhalar, aceptá ese calor tal como es; al exhalar, soltá un poco esa tensión.",
-        "Preguntate qué límite o qué valor tuyo te está señalando este enojo, más allá de la reacción del momento.",
-    ],
-    "Culpa": [
-        "Hay una diferencia entre el arrepentimiento (que reconoce el error y motiva a reparar) y la culpa que se convierte en maltrato hacia uno mismo: lo primero ayuda, lo segundo no.",
-        "Cuatro pasos que pueden ayudar con un error: reconocé lo que pasó, proponete no repetirlo, hacé algo concreto para reparar si podés, y apoyate en algo que te dé fuerza para seguir adelante.",
-        "Hablate con la misma calidez con la que tratarías a alguien que querés y que cometió el mismo error.",
-        "Probá esto: al inhalar, aceptá ese peso tal como es; al exhalar, ofrecete a vos mismo/a un poco de perdón.",
-    ],
-    "Vergüenza": [
-        "Un error no te convierte en una persona mala o indigna — lo que hiciste no es lo que sos.",
-        "Practicá tratarte con la misma amistad incondicional que le tendrías a otra persona en tu misma situación.",
-        "Compartir lo que te pasa con alguien de confianza también es un acto de compasión hacia vos mismo/a, no una debilidad.",
-        "Probá esto: al inhalar, aceptá esa sensación tal como es; al exhalar, date a vos mismo/a un poco de aceptación.",
-    ],
-    "General": [
-        "Probá esto: al inhalar, aceptá este malestar tal como es, sin empujarlo lejos; al exhalar, date a vos mismo/a un poco de alivio y calma.",
-        "Hablate con la misma calidez con la que le hablarías a alguien que querés mucho, en vez de exigirte o retarte.",
-        "Este estado también es pasajero: no se va a quedar exactamente así para siempre.",
-        "En vez de pelear contra lo que sentís o distraerte todo el tiempo de eso, probá quedarte un momento con la sensación tal cual es, sin juzgarla.",
-        "Dedicá unos minutos a sentarte en silencio y seguir tu respiración; cuando la mente se te vaya, notalo con suavidad y volvé a traerla, sin exigirte que se quede quieta.",
-    ],
-}
-
-RECOMENDACIONES_BUDISTA_DUELO = [
-    "Probá esto: al inhalar, aceptá este dolor tal como es; al exhalar, date a vos mismo/a un poco de alivio.",
-    "Tratate con la misma ternura que le darías a un amigo que está atravesando una pérdida.",
-    "Nada permanece igual para siempre, ni siquiera el dolor de este momento, aunque ahora se sienta así.",
-    "En vez de huir del dolor o distraerte todo el tiempo, permitite quedarte un momento con lo que sentís, sin la urgencia de que se resuelva ya.",
-    "Si sentís culpa o \"debería haber hecho algo distinto\", tratá de diferenciar el arrepentimiento (que reconoce lo que pasó y ayuda a seguir adelante) de la culpa que se convierte en maltrato hacia uno mismo.",
-    "Permitirte un momento de alivio, risa o disfrute en medio del duelo no traiciona a quien perdiste — el corazón puede sostener el dolor y la alegría a la vez, no son opuestos.",
-]
-
-RECOMENDACIONES_BUDISTA_DIAGNOSTICO = [
-    "Frente a una dificultad de salud: si hay un tratamiento posible, lo mejor es aplicarlo con la mayor calma posible; si no lo hay, angustiarse no cambia el resultado y sí te quita paz mientras tanto.",
-    "Aceptar esta dificultad como parte de lo que te toca atravesar ahora, en vez de pelear contra la realidad de lo que está pasando, puede aliviar bastante la carga.",
-    "Probá esto: al inhalar, aceptá este malestar tal como es; al exhalar, date a vos mismo/a un poco de alivio y fuerza.",
-    "Tratá a tu cuerpo y a vos mismo/a con paciencia en este momento, en vez de exigirte que ya tengas todo resuelto.",
-    "Apoyarte en otras personas también es parte del camino — no hace falta atravesarlo en soledad.",
-]
-
-# La idea de "no alimentar" un impulso y dejar que pase solo, y la de que
-# necesitar certeza total es en sí mismo un apego, coinciden bastante
-# entre esta tradición y lo que busca el tratamiento de primera línea
-# para el TOC (no pelear con el pensamiento, tolerar no saber).
-RECOMENDACIONES_BUDISTA_OBSESION = [
-    "Notá el impulso como una ola: sube, se queda un rato y baja sola si no la alimentás con la acción — no hace falta empujarla ni seguirla.",
-    "Necesitar estar 100% seguro/a de algo es, en el fondo, una forma de apego. Probá notar esa necesidad sin intentar satisfacerla esta vez.",
-    "Cuando el pensamiento vuelva, probá simplemente notarlo y dejarlo pasar, en vez de discutir con él o intentar resolverlo del todo.",
-    "Tratate con paciencia: no hacer la compulsión es incómodo a propósito, no es una señal de que algo esté saliendo mal.",
-    "Volvé a tu respiración cada vez que el impulso te empuje a actuar — no para escapar del malestar, sino para acompañarte mientras pasa.",
-]
-
-
-def recomendaciones_budistas_para(emocion):
-    return RECOMENDACIONES_BUDISTA_POR_EMOCION.get(emocion, RECOMENDACIONES_BUDISTA_POR_EMOCION["General"])
-
-
-EMOCIONES = ["Tristeza", "Ansiedad", "Enojo", "Culpa", "Vergüenza", "Otra"]
-
-# ==========================================================
-# --- TIPO DE SITUACIÓN ---
-# ----------------------------------------------------------
-# Las preguntas de "evidencia a favor / en contra" (reestructuración
-# cognitiva clásica) solo tienen sentido cuando el pensamiento es una
-# interpretación que puede ser más o menos exacta (ej: "no le caigo bien
-# a nadie", "voy a rendir mal"). No tienen sentido, y pueden resultar
-# invalidantes, cuando el pensamiento parte de un HECHO consumado, no de
-# una distorsión: un duelo/pérdida, o un diagnóstico de salud ya
-# confirmado. La literatura de CBT para duelo complicado apunta la
-# reestructuración solo a pensamientos secundarios como la culpa o el
-# autorreproche, no al hecho en sí — y lo mismo aplica a una noticia de
-# salud ya confirmada (distinto de un miedo o sospecha todavía incierta,
-# donde sí tiene sentido desafiar el pensamiento). Por eso se separan en
-# dos categorías distintas, en vez de una sola "problema de salud", y se
-# pregunta primero qué tipo de situación es para cambiar las preguntas
-# siguientes.
-# ==========================================================
-TIPO_DUELO = "Perdí a alguien o algo importante (duelo)"
-TIPO_DIAGNOSTICO = "Recibí un diagnóstico o una noticia de salud difícil"
-TIPO_OBSESION = "Tengo un pensamiento que se repite y una necesidad de hacer algo al respecto"
-TIPOS_SITUACION = [
-    TIPO_DUELO,
-    "Tuve un conflicto con alguien",
-    "Me preocupa algo que puede pasar",
-    "Sentí que fallé o no estuve a la altura",
-    "Me preocupa un posible problema de salud (todavía no lo sé con certeza)",
-    TIPO_DIAGNOSTICO,
-    TIPO_OBSESION,
-    "Otra situación",
-]
-# Situaciones donde el pensamiento parte de un hecho, no de una posible
-# distorsión: no pasan por "evidencia a favor/en contra" ni se fuerza una
-# creencia final más baja.
-TIPOS_HECHO_CONSUMADO = {TIPO_DUELO, TIPO_DIAGNOSTICO}
-
-# ==========================================================
-# --- PENSAMIENTOS OBSESIVOS / COMPULSIONES (tipo TOC) ---
-# ----------------------------------------------------------
-# Acá el enfoque clásico de "evidencia a favor/en contra" no solo no
-# ayuda: puede empeorar las cosas. La literatura sobre TOC muestra que
-# buscar tranquilidad o "pruebas" (reassurance-seeking) alivia un
-# momento, pero refuerza el círculo — el cerebro aprende que hacía falta
-# esa tranquilidad, y la próxima vez el impulso vuelve más fuerte y pide
-# más. El tratamiento de primera línea, Exposición con Prevención de
-# Respuesta (ERP), no busca resolver ni desmentir el pensamiento: busca
-# aumentar la tolerancia a la incertidumbre mientras se resiste la
-# compulsión (el ritual, físico o mental, incluido pedir que lo/la
-# tranquilicen). Por eso esta rama:
-# - NO pregunta evidencia a favor/en contra ni pasa por el checklist de
-#   distorsiones (analizar de más el contenido del pensamiento es, en sí
-#   mismo, parte de la compulsión).
-# - Identifica la compulsión/impulso en vez de debatir el pensamiento.
-# - Suma una pregunta breve de "confusión inferencial" (I-CBT): notar si
-#   esto es algo que está pasando de verdad ahora o una posibilidad que
-#   la mente imaginó, sin intentar resolver cuál de las dos es.
-# - En vez de "creencia en el pensamiento", mide la intensidad del
-#   impulso/malestar (estilo SUDS, la escala 0-100 que se usa en ERP).
-# - Pide un compromiso concreto de "no hacer la compulsión" por un rato,
-#   en vez de buscar cambiar el pensamiento.
-# - No entra al loop de reflexión (esas técnicas tampoco corresponden
-#   acá): la meta no es bajar la creencia, es tolerar el malestar.
-# ==========================================================
-
-# ==========================================================
-# --- SUGERIR UN TIPO MÁS ESPECÍFICO CUANDO ELIGE "OTRA SITUACIÓN" ---
-# ----------------------------------------------------------
-# Algunas personas no van a reconocerse en las opciones específicas (por
-# ejemplo, alguien con pensamientos repetitivos/compulsiones puede no
-# saber que eso tiene un nombre, y por eso el dropdown ya no lo nombra).
-# Para no perder esos casos, cuando elige "Otra situación" se revisa el
-# texto libre que escribió por si describe, en sus propias palabras, un
-# duelo, un diagnóstico ya confirmado, o un pensamiento repetitivo con
-# necesidad de hacer algo al respecto — y si hay coincidencia, se la
-# REDIRIGE directo a esas preguntas específicas (con un aviso breve, sin
-# ofrecer la alternativa de seguir con las genéricas). Las preguntas
-# genéricas quedan solo para cuando no se pudo categorizar la situación.
-# Se describe el patrón en criollo, nunca con el nombre clínico.
-# ==========================================================
-FRASES_DUELO = [
-    "se murio", "murio mi", "murio un", "murio una", "fallecio", "perdi a mi",
-    "la muerte de", "su muerte", "lo perdi", "la perdi", "ya no esta conmigo",
-    "se nos fue", "el velorio", "el funeral", "la despedida de",
-]
-FRASES_DIAGNOSTICO = [
-    "me diagnosticaron", "me detectaron", "el medico me dijo que tengo",
-    "me dieron el diagnostico", "me confirmaron que tengo", "resultado positivo",
-    "tengo cancer", "tengo diabetes", "padezco de", "me acaban de diagnosticar",
-]
-FRASES_OBSESION = [
-    "no puedo dejar de revisar", "reviso una y otra vez", "necesito revisar varias veces",
-    "tengo que revisar", "me tengo que lavar las manos", "lavarme las manos muchas veces",
-    "lavo las manos varias veces", "me lavo las manos varias veces",
-    "tengo que repetir", "tengo que hacerlo varias veces hasta que se sienta bien",
-    "si no lo hago va a pasar algo malo", "va a pasar algo malo",
-    "no me puedo sacar ese pensamiento de la cabeza",
-    "pensamiento que no se va", "necesito que quede perfecto", "necesito simetria",
-    "compulsion", "obsesivo", "obsesiva", "obsesionado", "obsesionada",
-]
-
-
-def _detectar_frase(texto, lista_frases):
-    t = _normalizar_riesgo(texto)
-    return any(frase in t for frase in lista_frases)
-
-
-def detectar_tipo_sugerido(texto):
-    if _detectar_frase(texto, FRASES_DUELO):
-        return TIPO_DUELO
-    if _detectar_frase(texto, FRASES_DIAGNOSTICO):
-        return TIPO_DIAGNOSTICO
-    if _detectar_frase(texto, FRASES_OBSESION):
-        return TIPO_OBSESION
-    return None
-
-
-# Descripción en criollo de cada tipo sugerido, sin nombre clínico, para
-# mostrar en el aviso de que las preguntas van a cambiar (mostrar_paso_sugerencia_tipo).
-DESCRIPCION_TIPO_SUGERIDO = {
-    TIPO_DUELO: "esto suena a que perdiste a alguien o algo importante para vos",
-    TIPO_DIAGNOSTICO: "esto suena a que recibiste una noticia de salud ya confirmada",
-    TIPO_OBSESION: "esto suena a un pensamiento que se te repite mucho y te genera la necesidad de hacer algo al respecto (revisar, repetir, pedir que te tranquilicen, etc.)",
-}
 
 # ==========================================================
 # --- PENSAMIENTOS A SEGUIR TRABAJANDO ("temas") ---
@@ -1486,72 +324,6 @@ def color_por_avance(creencia_final_pct):
 # "temas" (color_por_avance), invertido: acá 100% de bienestar = mejor
 # estado = Celeste, no Rojo.
 # ==========================================================
-PREGUNTAS_BIENESTAR = [
-    "Me he sentido alegre y de buen humor",
-    "Me he sentido tranquilo/a y relajado/a",
-    "Me he sentido activo/a y con energía",
-    "Me desperté sintiéndome fresco/a y descansado/a",
-    "Mi vida diaria ha estado llena de cosas que me interesan",
-]
-
-OPCIONES_BIENESTAR = [
-    ("En ningún momento", 0),
-    ("Alguna vez", 1),
-    ("Menos de la mitad del tiempo", 2),
-    ("Más de la mitad del tiempo", 3),
-    ("La mayor parte del tiempo", 4),
-    ("Todo el tiempo", 5),
-]
-
-# Descripción cortita para el historial (pensado para verse "de un
-# vistazo", igual criterio que el punto de color): usa el mismo nombre de
-# color que ya calcula color_por_avance, para que texto y color nunca
-# queden desalineados entre sí.
-DESCRIPCION_BIENESTAR_POR_COLOR = {
-    # Regla (Gabriel, 2026-07-14): las etiquetas de los resultados más
-    # bajos nunca califican a la persona ("Flojo", "Bajo") — describen la
-    # semana con calidez y dejan una nota de aliento.
-    "Rojo": "Semana difícil — un paso a la vez",
-    "Naranja": "Remontando, de a poco",
-    "Amarillo": "A mitad de camino",
-    "Verde": "Bien",
-    "Celeste": "Muy bien",
-    "Gris": "Sin datos",
-}
-
-# Consejos concretos de activación conductual, uno por cada pregunta del
-# WHO-5 (mismo índice que PREGUNTAS_BIENESTAR) — se muestran en el
-# resultado del chequeo eligiendo la(s) pregunta(s) donde salió más bajo,
-# para que el consejo apunte a lo que realmente le está costando a la
-# persona en vez de ser un mensaje genérico igual para todos.
-RECOMENDACIONES_BIENESTAR_POR_PREGUNTA = [
-    [  # 0: "Me he sentido alegre y de buen humor"
-        "Elegí una actividad chica que antes disfrutabas y hacela hoy, aunque no tengas muchas ganas.",
-        "Exponete un rato a la luz del sol o abrí las cortinas/ventanas de tu casa.",
-        "Contactá a una persona con la que tengas buena relación, aunque sea un mensaje corto.",
-    ],
-    [  # 1: "Me he sentido tranquilo/a y relajado/a"
-        "Hacé un ejercicio de respiración lenta: inhalar 4 segundos, sostener 4, exhalar 6, repetir 5 veces.",
-        "Postergá las preocupaciones a un horario fijo del día (20 minutos), en vez de darles vueltas todo el día.",
-        "Hacé algo con las manos que requiera atención (cocinar, ordenar, dibujar) para bajar un rato la cabeza.",
-    ],
-    [  # 2: "Me he sentido activo/a y con energía"
-        "Salí a caminar 15-20 minutos al aire libre, aunque sea a paso lento.",
-        "Empezá con algo físico bien chico (subir una escalera, estirar 5 minutos) en vez de plantearte \"hacer ejercicio\" entero.",
-        "Fijate si estás pasando muchas horas seguidas sentado/a, y probá cortar con una pausa cada tanto.",
-    ],
-    [  # 3: "Me desperté sintiéndome fresco/a y descansado/a"
-        "Probá mantener un horario fijo para acostarte y levantarte, incluso los fines de semana.",
-        "Evitá pantallas (celular, tele) la última media hora antes de dormir.",
-        "Si tomás café o mate por la tarde/noche, probá cortarlo antes y ver si duerme distinto.",
-    ],
-    [  # 4: "Mi vida diaria ha estado llena de cosas que me interesan"
-        "Anotá una tarea chica y concreta que puedas terminar hoy, para tener una sensación de logro.",
-        "Retomá aunque sea 15 minutos algo que solías disfrutar y dejaste de lado.",
-        "Pensá en algo que te gustaría aprender o probar, y dale el primer paso más chico posible hoy.",
-    ],
-]
-
 
 # ==========================================================
 # --- COLECCIÓN DE ENSEÑANZAS (gamificación, opción B) ---
@@ -1565,76 +337,6 @@ RECOMENDACIONES_BIENESTAR_POR_PREGUNTA = [
 # contando los trabajos ya guardados (sin tabla nueva en Supabase).
 # Mismo criterio que el resto de la app: sin jerga clínica ni nombres de
 # autores/términos en tibetano en el texto que ve la persona.
-PERLAS_SABIDURIA = [
-    ("Un pensamiento no es un hecho", "Que algo se te cruce por la cabeza no lo vuelve cierto. Cuando un pensamiento te pegue fuerte, probá decirte: \"estoy teniendo el pensamiento de que...\" — nombrarlo así ya le baja el peso."),
-    ("Las emociones pasan solas", "Ninguna emoción dura para siempre, ni siquiera las más intensas: suben, llegan a un pico y bajan. Si lográs esperar unos minutos sin actuar en caliente, baja sola."),
-    ("Hablate como a alguien que querés", "Solemos decirnos cosas que jamás le diríamos a un amigo en la misma situación. La próxima vez que te escuches tratándote duro, preguntate: ¿qué le diría a alguien que quiero si le pasara esto mismo?"),
-    ("La acción viene antes que las ganas", "Cuando el ánimo está bajo, esperar a tener ganas suele ser esperar para siempre. Funciona al revés: primero se arranca con algo chico, y las ganas aparecen después."),
-    ("Nada difícil se queda igual", "Lo que hoy se siente insoportable no se va a sentir igual dentro de un tiempo: las situaciones cambian, y vos también. Vale recordarlo antes de tomar decisiones definitivas en un mal momento."),
-    ("La mente exagera para protegerte", "El cerebro está hecho para detectar peligros, no para ser justo: por eso te muestra el peor escenario como si fuera el más probable. Cuando aparezca, preguntate: ¿qué es lo más probable, no lo peor posible?"),
-    ("Este momento difícil no te define", "Una mala semana no es una mala vida. Estás atravesando algo difícil; no sos algo difícil — y esa diferencia cambia cómo se sigue."),
-    ("Contarlo alivia", "La vergüenza y la preocupación crecen en el silencio. Contarle a una persona de confianza lo que te pasa suele aliviar más que semanas de darle vueltas a solas."),
-    ("El cuerpo también escucha", "Cuando exhalás más lento de lo que inhalás, el cuerpo entiende que el peligro pasó y se afloja. Probá: inhalar contando 4, exhalar contando 6, unas cinco veces."),
-    ("Dar vueltas no es resolver", "Darle vueltas a un problema parece \"estar trabajándolo\", pero muchas veces es un círculo. Un buen filtro: ¿esto que estoy pensando termina en algo concreto que puedo hacer? Si no, mejor cortar y volver más tarde."),
-    ("Mirate desde afuera", "Cuando estés muy metido/a en un problema, probá describirlo como si le pasara a otra persona. Desde afuera casi siempre se ven salidas que desde adentro no aparecen."),
-    ("¿Cuánto va a pesar esto en un año?", "Muchas cosas que hoy ocupan toda tu atención, dentro de un año van a ser una anécdota. Preguntarte \"¿cuánto me va a importar esto en un año?\" no resuelve el problema, pero lo pone en su tamaño real."),
-    ("Ojo con los \"debería\"", "Buena parte del malestar no viene de lo que pasó, sino del \"esto no debería ser así\". Probá cambiar \"debería\" por \"me gustaría\": la situación es la misma, pero el nudo afloja."),
-    ("Compararse es una trampa", "Cuando te comparás con otros, comparás lo que vos vivís por dentro con lo que ellos muestran por fuera. Nadie anda mostrando sus peores días — vos tampoco."),
-    ("Sos más que tu peor error", "Un error es algo que hiciste, no algo que sos. Decir \"me equivoqué en esto\" en vez de \"soy un desastre\" deja lugar para arreglarlo y seguir."),
-    ("Lo que sentís, lo sienten muchos", "Sea lo que sea que te esté pasando, le está pasando también a muchísima gente en este mismo momento. Eso no achica tu problema, pero sí tu soledad."),
-    ("Descansar también es avanzar", "El descanso no es tiempo perdido: es lo que hace posible todo lo demás. Exigirse sin pausa rinde menos que trabajar con recreos."),
-    ("Elegí una cosa, no todas", "Cuando todo parece urgente, lo que mejor funciona es elegir UNA sola cosa chica y terminarla. Un logro real, por chico que sea, empuja más que diez planes perfectos."),
-    ("Esperar antes de reaccionar es fuerza", "Aguantarse el impulso de contestar en caliente no es debilidad: es la habilidad que más problemas evita. Diez minutos de espera suelen ganarle a semanas de arrepentimiento."),
-    ("Mirá lo conocido con ojos nuevos", "Cuando una situación se repite hace tiempo, la costumbre tapa las salidas. Preguntate: si esto me pasara hoy por primera vez, ¿qué haría? A veces la respuesta sorprende."),
-    ("La alegría ajena también suma", "Alegrarte de verdad por algo bueno que le pasó a otro no te quita nada: es una fuente más de momentos buenos en tu día. Y como casi todo, se entrena."),
-    ("Agradecer una sola cosa concreta", "No hace falta estar bien para encontrar UNA cosa que hoy salió bien, aunque sea mínima. Nombrarla no niega lo difícil: le hace contrapeso."),
-    ("Lo que evitás se agranda", "Evitar algo que da miedo alivia hoy, pero agranda el miedo para mañana. Acercarse de a poco, en dosis chicas y manejables, es la forma más comprobada de achicarlo."),
-    ("Ya atravesaste cosas difíciles antes", "Pensá en algo que hace unos años te parecía imposible de superar y hoy casi ni recordás. Esa es la prueba más concreta de que también vas a poder con esto."),
-]
-
-
-# ==========================================================
-# --- CATÁLOGO DE COSMÉTICOS (gamificación, "pase" del bloque 3) ---
-# ----------------------------------------------------------
-# Estilo pase de recompensas: cada ejercicio de "Otra perspectiva"
-# completado suma 1 nivel, y cada nivel va desbloqueando flores/plantas
-# nuevas para personalizar (a) la flor con la que florecen tus
-# pensamientos trabajados y (b) las florcitas decorativas del menú
-# principal. Son emojis a propósito: mismo lenguaje visual que las
-# plantas del jardín, cero problemas de copyright y cero peso extra.
-# La elección se guarda en el perfil (cosmetico_planta/cosmetico_fondo
-# en usuarios_regulacion).
-FLOR_POR_DEFECTO = "🌸"
-FONDO_POR_DEFECTO = "🌼"
-
-CATALOGO_COSMETICOS = [
-    {"emoji": "🌸", "nombre": "Flor de cerezo", "nivel": 0},
-    {"emoji": "🌼", "nombre": "Margarita", "nivel": 0},
-    {"emoji": "🌷", "nombre": "Tulipán", "nivel": 2},
-    {"emoji": "🌻", "nombre": "Girasol", "nivel": 4},
-    {"emoji": "🌺", "nombre": "Hibisco", "nivel": 6},
-    {"emoji": "🌹", "nombre": "Rosa", "nivel": 9},
-    {"emoji": "🪷", "nombre": "Flor de loto", "nivel": 12},
-    {"emoji": "💐", "nombre": "Ramo de flores", "nivel": 16},
-    {"emoji": "🍀", "nombre": "Trébol de la suerte", "nivel": 20},
-    {"emoji": "🌵", "nombre": "Cactus florecido", "nivel": 25},
-    {"emoji": "🌾", "nombre": "Espigas doradas", "nivel": 30},
-    {"emoji": "🎋", "nombre": "Bambú de los deseos", "nivel": 40},
-]
-
-# Colores de fondo desbloqueables (misma lógica de niveles). Todos en la
-# misma familia del crema original: pasteles suaves, cálidos y de
-# luminosidad parecida, para que la tarjeta y los textos se lean igual
-# de bien sobre cualquiera.
-CATALOGO_COLORES_FONDO = [
-    {"hex": "#E8DBC0", "nombre": "Crema clásico", "nivel": 0},
-    {"hex": "#EFD9D3", "nombre": "Rosa suave", "nivel": 3},
-    {"hex": "#DCE5D3", "nombre": "Verde menta", "nivel": 5},
-    {"hex": "#D7E2E8", "nombre": "Celeste bruma", "nivel": 8},
-    {"hex": "#E3DAE9", "nombre": "Lavanda", "nivel": 11},
-    {"hex": "#F0DCC6", "nombre": "Durazno", "nivel": 14},
-    {"hex": "#E0E0D6", "nombre": "Salvia", "nivel": 18},
-]
 
 
 def recomendaciones_para(emocion):
@@ -1658,75 +360,6 @@ def recomendaciones_para(emocion):
 #   que..." reduce cuánto se cree y cuánto pesa un pensamiento, sin
 #   necesitar cambiar su contenido.
 # ==========================================================
-UMBRAL_CREENCIA_ALTA = 60   # % a partir del cual seguimos insistiendo
-# Tope de vueltas extra antes de seguir igual. Era 3, pero cansaba: una
-# sola vuelta extra alcanza para ofrecer otra mirada sin insistir — y
-# siempre está el botón "Prefiero terminar por ahora" como salida.
-MAX_RONDAS_REFLEXION = 1
-# Si la persona reportó una intensidad emocional baja (Paso 1), no tiene
-# sentido insistir con más rondas de reflexión solo porque un porcentaje
-# quedó en el medio: sería ineficiente e invalidaría su propio reporte de
-# "esto no me afecta tanto". La intensidad que la persona reportó pesa
-# más que el número de creencia derivado.
-UMBRAL_INTENSIDAD_PARA_INSISTIR = 5   # sobre 10
-
-_FRASES_NO_SABE = [
-    "no se", "no sé", "nose", "ns", "no lo se", "no lo sé",
-    "no tengo idea", "ni idea", "no sabria decir", "no sabría decir",
-]
-
-
-def contiene_no_sabe(texto):
-    t = (texto or "").strip().lower()
-    if not t:
-        return False
-    # Antes bastaba con que "no se" apareciera en cualquier parte del
-    # texto, lo que daba falsos positivos en respuestas largas que
-    # solo de casualidad contienen esas dos palabras (ej. "el tren no
-    # se detuvo", "no se lavó bien la ropa", "todavía no se sabe qué
-    # pasó") — encontrado con fuzzing (5/5 casos de este tipo probados
-    # daban falso positivo). Una respuesta de "no sé" genuina es
-    # corta, no una oración larga que la menciona de paso.
-    if len(t) > 25:
-        return False
-    return any(t == frase or frase in t for frase in _FRASES_NO_SABE)
-
-
-def necesita_reflexion_extra(r):
-    if r.get("intensidad_inicial", 0) < UMBRAL_INTENSIDAD_PARA_INSISTIR:
-        return False
-    no_sabe = contiene_no_sabe(r.get("evidencia_en_contra")) or contiene_no_sabe(r.get("pensamiento_alternativo"))
-    creencia_alta = r.get("creencia_final_pct", 0) >= UMBRAL_CREENCIA_ALTA
-    return no_sabe or creencia_alta
-
-
-TECNICAS_REFLEXION = [
-    {
-        "titulo": "Mirémoslo desde afuera",
-        "intro": "Tomar distancia de un pensamiento, hablándonos como si fuéramos otra persona, suele bajarle intensidad.",
-        "consigna": lambda r: "Contate lo que te pasó en tercera persona, usando tu nombre en vez de \"yo\" (ej: \"[Tu nombre] siente que...\"). ¿Qué le dirías a esa persona?",
-        "hint": "Ej: \"Ale siente que todo va a salir mal, pero otras veces logró salir adelante...\"",
-    },
-    {
-        "titulo": "Pensemos en el tiempo",
-        "intro": "Imaginar cómo vas a ver esto más adelante ayuda a ganar perspectiva sobre lo que sentís ahora.",
-        "consigna": lambda r: "Imaginate mirando esta misma situación dentro de 1 año. ¿Qué importancia te parece que va a tener entonces?",
-        "hint": "Escribí lo que se te ocurra, no hay una respuesta correcta.",
-    },
-    {
-        "titulo": "Es un pensamiento, no un hecho",
-        "intro": "Notar que un pensamiento es solo un pensamiento (y no necesariamente la realidad) puede aflojar su peso.",
-        "consigna": lambda r: f"Repetite (o escribilo): \"Estoy teniendo el pensamiento de que {r.get('pensamiento_automatico', '')}\". Después de notarlo así, ¿qué te parece?",
-        "hint": "No hace falta estar de acuerdo ni en desacuerdo, solo notarlo.",
-    },
-    {
-        "titulo": "Un momento de compasión con vos mismo/a",
-        "intro": "Tratarte con la misma calidez que le darías a alguien que querés, en un momento difícil, también ayuda a bajarle intensidad al pensamiento.",
-        "consigna": lambda r: "Si querés, poné una mano en el pecho y decite: \"esto es un momento difícil\", \"no soy el único/a al que le pasa esto\", \"¿puedo tratarme con la misma amabilidad que le daría a alguien que quiero?\". ¿Qué te pasa al hacerlo?",
-        "hint": "No hace falta que te salga natural la primera vez, alcanza con probarlo.",
-    },
-]
-
 
 # PBKDF2-HMAC-SHA256 con sal aleatoria por usuario y 600.000 iteraciones:
 # recomendación vigente de OWASP (Password Storage Cheat Sheet) para que
@@ -1734,18 +367,6 @@ TECNICAS_REFLEXION = [
 # datos se filtrara. Un hash simple (ej. SHA256 solo) se prueba a
 # millones por segundo en hardware moderno, así que no alcanza para
 # datos sensibles como los de esta app.
-PBKDF2_ITERACIONES = 600_000
-
-
-def generar_salt():
-    return os.urandom(16).hex()
-
-
-def hash_contrasena(contrasena, salt_hex):
-    salt = bytes.fromhex(salt_hex)
-    derivado = hashlib.pbkdf2_hmac("sha256", contrasena.encode("utf-8"), salt, PBKDF2_ITERACIONES)
-    return derivado.hex()
-
 
 def main(page: ft.Page):
     page.title = "DRE"
@@ -2006,62 +627,6 @@ def main(page: ft.Page):
     # ==========================================================
     # LOGIN / REGISTRO
     # ==========================================================
-    def buscar_usuario_por_email(email):
-        try:
-            resp = requests.get(
-                SUPABASE_USUARIOS_URL,
-                headers=HEADERS,
-                params={"email": f"eq.{email}", "select": "*"},
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase GET usuarios_regulacion [{resp.status_code}]: {resp.text}")
-                return None, False
-            resultados = resp.json()
-            return (resultados[0], True) if resultados else (None, True)
-        except Exception as e:
-            print("Error de red (usuarios_regulacion):", repr(e))
-            return None, False
-
-    def crear_usuario(email, password_hash, password_salt=None):
-        try:
-            resp = requests.post(
-                SUPABASE_USUARIOS_URL,
-                headers={**HEADERS, "Prefer": "return=representation"},
-                json={"email": email, "password_hash": password_hash, "password_salt": password_salt},
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase POST usuarios_regulacion [{resp.status_code}]: {resp.text}")
-                return None
-            creados = resp.json()
-            return creados[0] if creados else None
-        except Exception as e:
-            print("Error de red (crear usuario):", repr(e))
-            return None
-
-    def buscar_o_crear_usuario_google(email):
-        # Usado solo por el login con Google: no pide/valida contraseña.
-        usuario, ok = buscar_usuario_por_email(email)
-        if not ok:
-            return None
-        if usuario:
-            return usuario
-        return crear_usuario(email, None)
-
-    def actualizar_password_supabase(usuario_id, password_hash, password_salt):
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_USUARIOS_URL}?id=eq.{usuario_id}",
-                headers=HEADERS,
-                json={"password_hash": password_hash, "password_salt": password_salt},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (actualizar password):", e)
-            return False
 
     def ir_a_menu_principal():
         if not estado.get("vio_instrucciones"):
@@ -2474,30 +1039,6 @@ def main(page: ft.Page):
         "¿Cuál es tu película favorita?",
     ]
 
-    def guardar_perfil_supabase(nombre, edad, genero, en_tratamiento, pregunta_seguridad=None, respuesta_hash=None, respuesta_salt=None):
-        if estado["modo_local"]:
-            return True
-        datos = {"nombre": nombre, "edad": edad, "genero": genero, "en_tratamiento": en_tratamiento}
-        # Solo se tocan estos campos si la persona escribió una respuesta
-        # nueva: si los dejó vacíos porque ya tenía una configurada de
-        # antes, no hay que pisarla con nada.
-        if pregunta_seguridad is not None:
-            datos["pregunta_seguridad"] = pregunta_seguridad
-            datos["respuesta_seguridad_hash"] = respuesta_hash
-            datos["respuesta_seguridad_salt"] = respuesta_salt
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_USUARIOS_URL}?id=eq.{estado['usuario_id']}",
-                headers=HEADERS,
-                json=datos,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (guardar perfil):", e)
-            return False
-
     def mostrar_perfil():
         es_primera_vez = not estado["nombre"]
 
@@ -2570,7 +1111,16 @@ def main(page: ft.Page):
                 salt_respuesta = generar_salt()
                 hash_respuesta = hash_contrasena(_sin_acentos(respuesta_valor.lower()), salt_respuesta)
 
-            if not guardar_perfil_supabase(nombre_valor, edad_valor, genero_valor, tratamiento_valor, pregunta_valor, hash_respuesta, salt_respuesta):
+            if not guardar_perfil_supabase(
+                estado["usuario_id"],
+                nombre_valor,
+                edad_valor,
+                genero_valor,
+                tratamiento_valor,
+                pregunta_valor,
+                hash_respuesta,
+                salt_respuesta,
+            ):
                 mostrar_error(texto_error, "No pudimos guardar los cambios. Revisá tu conexión e intentá de nuevo.")
                 return
 
@@ -2652,18 +1202,11 @@ def main(page: ft.Page):
     def guardar_instrucciones_vistas_supabase():
         if estado["modo_local"]:
             return True
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_USUARIOS_URL}?id=eq.{estado['usuario_id']}",
-                headers=HEADERS,
-                json={"vio_instrucciones": True},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (guardar vio_instrucciones):", e)
-            return False
+
+        return actualizar_usuario(
+            estado["usuario_id"],
+            {"vio_instrucciones": True},
+        )
 
     def mostrar_instrucciones(pagina=0, paginas=None, permitir_volver=False):
         # permitir_volver solo se activa cuando se abre a mano desde el
@@ -2948,18 +1491,11 @@ def main(page: ft.Page):
     def guardar_instrucciones_trabajo_emocional_vistas_supabase():
         if estado["modo_local"]:
             return True
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_USUARIOS_URL}?id=eq.{estado['usuario_id']}",
-                headers=HEADERS,
-                json={"vio_instrucciones_trabajo_emocional": True},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (guardar vio_instrucciones_trabajo_emocional):", e)
-            return False
+
+        return actualizar_usuario(
+            estado["usuario_id"],
+            {"vio_instrucciones_trabajo_emocional": True},
+        )
 
     def mostrar_instrucciones_trabajo_emocional(permitir_volver=False, detallada=False):
         # La versión corta se muestra sola la primera vez; la detallada
@@ -3061,18 +1597,11 @@ def main(page: ft.Page):
     def guardar_instrucciones_reappraisal_vistas_supabase():
         if estado["modo_local"]:
             return True
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_USUARIOS_URL}?id=eq.{estado['usuario_id']}",
-                headers=HEADERS,
-                json={"vio_instrucciones_reappraisal": True},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (guardar vio_instrucciones_reappraisal):", e)
-            return False
+
+        return actualizar_usuario(
+            estado["usuario_id"],
+            {"vio_instrucciones_reappraisal": True},
+        )
 
     def mostrar_instrucciones_reappraisal(permitir_volver=False, detallada=False):
         # Igual que en "Trabajo emocional": versión corta la primera vez,
@@ -3502,43 +2031,41 @@ def main(page: ft.Page):
     # ==========================================================
     def obtener_progreso_juegos_reappraisal():
         if estado["modo_local"]:
-            return estado.get("_juegos_reappraisal_locales", [])
-        try:
-            resp = requests.get(
-                SUPABASE_JUEGOS_REAPPRAISAL_URL,
-                headers=HEADERS,
-                params={"usuario_id": f"eq.{estado['usuario_id']}", "select": "*"},
-                timeout=10,
+            return estado.get(
+                "_juegos_reappraisal_locales",
+                [],
             )
-            if not resp.ok:
-                print(f"Error Supabase GET progreso_juegos_reappraisal [{resp.status_code}]: {resp.text}")
-                return None
-            return resp.json()
-        except Exception as e:
-            print("Error de red (progreso_juegos_reappraisal):", repr(e))
-            return None
+
+        return obtener_progreso_juegos_supabase(
+            estado["usuario_id"]
+        )
 
     def marcar_nivel_juego_completado(categoria, nivel):
         if estado["modo_local"]:
-            locales = estado.setdefault("_juegos_reappraisal_locales", [])
-            if not any(p["categoria"] == categoria and p["nivel"] == nivel for p in locales):
-                locales.append({"categoria": categoria, "nivel": nivel})
-            return True
-        try:
-            resp = requests.post(
-                SUPABASE_JUEGOS_REAPPRAISAL_URL,
-                headers={**HEADERS, "Prefer": "resolution=ignore-duplicates"},
-                params={"on_conflict": "usuario_id,categoria,nivel"},
-                json={"usuario_id": estado["usuario_id"], "categoria": categoria, "nivel": nivel},
-                timeout=10,
+            locales = estado.setdefault(
+                "_juegos_reappraisal_locales",
+                [],
             )
-            if not resp.ok:
-                print(f"Error Supabase POST progreso_juegos_reappraisal [{resp.status_code}]: {resp.text}")
-                return False
+
+            if not any(
+                p["categoria"] == categoria
+                and p["nivel"] == nivel
+                for p in locales
+            ):
+                locales.append(
+                    {
+                        "categoria": categoria,
+                        "nivel": nivel,
+                    }
+                )
+
             return True
-        except Exception as e:
-            print("Error de red (guardar progreso juego reappraisal):", repr(e))
-            return False
+
+        return marcar_nivel_juego_completado_supabase(
+            estado["usuario_id"],
+            categoria,
+            nivel,
+        )
 
     def mostrar_reappraisal_juegos_categorias():
 
@@ -5973,29 +4500,19 @@ def main(page: ft.Page):
             return False
 
     def vincular_reporte_a_tema(r):
-        # Se usa cuando la persona decide, ya al final, guardar el
-        # pensamiento como un tema a seguir: el reporte ya se había
-        # guardado sin tema_id, así que hay que actualizarlo.
         if estado["modo_local"]:
-            registro = r.get("_registro_local")
-            if registro is not None:
-                registro["tema_id"] = r.get("tema_id")
+            registro["tema_id"] = r.get("tema_id")
             return True
+
         reporte_id = r.get("_reporte_id")
+
         if reporte_id is None:
             return False
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_REPORTES_URL}?id=eq.{reporte_id}",
-                headers=HEADERS,
-                json={"tema_id": r.get("tema_id")},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (vincular reporte a tema):", e)
-            return False
+
+        return actualizar_reporte(
+            reporte_id,
+            {"tema_id": r.get("tema_id")},
+        )
 
     # ==========================================================
     # CRUD de "temas" (pensamientos a seguir trabajando)
@@ -6003,20 +4520,10 @@ def main(page: ft.Page):
     def obtener_temas_usuario():
         if estado["modo_local"]:
             return estado["_temas_locales"]
-        try:
-            resp = requests.get(
-                SUPABASE_TEMAS_URL,
-                headers=HEADERS,
-                params={"usuario_id": f"eq.{estado['usuario_id']}", "select": "*", "order": "actualizado_en.desc"},
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase GET temas_seguimiento [{resp.status_code}]: {resp.text}")
-                return None
-            return resp.json()
-        except Exception as e:
-            print("Error de red (temas):", repr(e))
-            return None
+
+        return obtener_temas_usuario_supabase(
+            estado["usuario_id"]
+        )
 
     def crear_tema(titulo, color, color_automatico=True):
         if estado["modo_local"]:
@@ -6033,23 +4540,23 @@ def main(page: ft.Page):
             }
             estado["_temas_locales"].insert(0, tema)
             return tema
-        try:
-            resp = requests.post(
-                SUPABASE_TEMAS_URL,
-                headers={**HEADERS, "Prefer": "return=representation"},
-                json={"usuario_id": estado["usuario_id"], "titulo": titulo, "color": color, "color_automatico": color_automatico, "estado": ""},
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase POST temas_seguimiento [{resp.status_code}]: {resp.text}")
-                return None
-            creados = resp.json()
-            return creados[0] if creados else None
-        except Exception as e:
-            print("Error de red (crear tema):", repr(e))
-            return None
+        
+        registro = {
+            "usuario_id": estado["usuario_id"],
+            "titulo": titulo,
+            "color": color,
+            "color_automatico": color_automatico,
+            "estado": "",
+        }
 
-    def actualizar_tema(tema_id, color, estado_texto, color_automatico=False):
+        return crear_tema_supabase(registro)
+
+    def actualizar_tema(
+        tema_id,
+        color,
+        estado_texto,
+        color_automatico=False,
+    ):
         if estado["modo_local"]:
             for t in estado["_temas_locales"]:
                 if t["id"] == tema_id:
@@ -6057,62 +4564,53 @@ def main(page: ft.Page):
                     t["estado"] = estado_texto
                     t["color_automatico"] = color_automatico
             return True
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_TEMAS_URL}?id=eq.{tema_id}",
-                headers=HEADERS,
-                json={"color": color, "estado": estado_texto, "color_automatico": color_automatico, "actualizado_en": datetime.now().isoformat()},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (actualizar tema):", e)
-            return False
+
+        return actualizar_tema_supabase(
+            tema_id,
+            {
+                "color": color,
+                "estado": estado_texto,
+                "color_automatico": color_automatico,
+                "actualizado_en": datetime.now().isoformat(),
+            },
+        )
 
     def actualizar_flor_tema(tema_id, flor):
-        # flor=None vuelve a la flor general elegida en Personalización.
         if estado["modo_local"]:
             for t in estado["_temas_locales"]:
                 if t["id"] == tema_id:
                     t["flor"] = flor
             return True
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_TEMAS_URL}?id=eq.{tema_id}",
-                headers=HEADERS,
-                json={"flor": flor, "actualizado_en": datetime.now().isoformat()},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (actualizar flor del tema):", e)
-            return False
 
-    def marcar_tema_resuelto(tema_id, reflexion, resuelto=True):
-        # El mensaje ("reflexión final") solo tiene sentido guardarlo
-        # cuando la persona da la situación/emoción por totalmente
-        # solucionada — no se infiere del color ni del % de creencia,
-        # porque esos son más difusos. Es una acción explícita.
+        return actualizar_tema_supabase(
+            tema_id,
+            {
+                "flor": flor,
+                "actualizado_en": datetime.now().isoformat(),
+            },
+        )
+
+    def marcar_tema_resuelto(
+        tema_id,
+        reflexion,
+        resuelto=True,
+    ):
         if estado["modo_local"]:
             for t in estado["_temas_locales"]:
                 if t["id"] == tema_id:
                     t["resuelto"] = resuelto
                     t["reflexion_final"] = reflexion
             return True
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_TEMAS_URL}?id=eq.{tema_id}",
-                headers=HEADERS,
-                json={"resuelto": resuelto, "reflexion_final": reflexion, "actualizado_en": datetime.now().isoformat()},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (marcar tema resuelto):", e)
-            return False
+
+        return actualizar_tema_supabase(
+            tema_id,
+            {
+                "resuelto": resuelto,
+                "reflexion_final": reflexion,
+                "actualizado_en": datetime.now().isoformat(),
+            },
+        )
+
 
     def borrar_tema(tema_id):
         # "Quitar de mis temas" no borra el historial: los reportes ya
@@ -6134,34 +4632,24 @@ def main(page: ft.Page):
                 timeout=10,
             )
             resp.raise_for_status()
-            resp2 = requests.delete(
-                f"{SUPABASE_TEMAS_URL}?id=eq.{tema_id}",
-                headers=HEADERS,
-                timeout=10,
-            )
-            resp2.raise_for_status()
-            return True
+
+            return borrar_tema_supabase(tema_id)
+
         except Exception as e:
             print("Error de red (borrar tema):", e)
             return False
 
     def obtener_reportes_de_tema(tema_id):
         if estado["modo_local"]:
-            return [r for r in estado["_reportes_locales"] if r.get("tema_id") == tema_id]
-        try:
-            resp = requests.get(
-                SUPABASE_REPORTES_URL,
-                headers=HEADERS,
-                params={"tema_id": f"eq.{tema_id}", "select": "*", "order": "fecha.desc"},
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase GET reportes por tema [{resp.status_code}]: {resp.text}")
-                return None
-            return resp.json()
-        except Exception as e:
-            print("Error de red (reportes de tema):", repr(e))
-            return None
+            return [
+                r
+                for r in estado["_reportes_locales"]
+                if r.get("tema_id") == tema_id
+            ]
+
+        return obtener_reportes_de_tema_supabase(
+            tema_id
+        )
 
     # ==========================================================
     # CRUD de chequeos de bienestar (WHO-5)
@@ -6169,24 +4657,15 @@ def main(page: ft.Page):
     def obtener_chequeos_bienestar():
         if estado["modo_local"]:
             return estado["_bienestar_locales"]
-        try:
-            resp = requests.get(
-                SUPABASE_BIENESTAR_URL,
-                headers=HEADERS,
-                params={"usuario_id": f"eq.{estado['usuario_id']}", "select": "*", "order": "fecha.desc"},
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase GET chequeos_bienestar [{resp.status_code}]: {resp.text}")
-                return None
-            return resp.json()
-        except Exception as e:
-            print("Error de red (chequeos_bienestar):", repr(e))
-            return None
+
+        return obtener_chequeos_bienestar_supabase(
+            estado["usuario_id"]
+        )
 
     def guardar_chequeo_bienestar(respuestas):
         puntaje_total = sum(respuestas)
         porcentaje = puntaje_total * 4
+
         datos = {
             "usuario_id": estado["usuario_id"],
             "p1": respuestas[0],
@@ -6197,26 +4676,14 @@ def main(page: ft.Page):
             "puntaje_total": puntaje_total,
             "porcentaje": porcentaje,
         }
+
         if estado["modo_local"]:
             datos["id"] = f"local-{len(estado['_bienestar_locales']) + 1}"
             datos["fecha"] = datetime.now().isoformat()
             estado["_bienestar_locales"].insert(0, datos)
             return datos
-        try:
-            resp = requests.post(
-                SUPABASE_BIENESTAR_URL,
-                headers={**HEADERS, "Prefer": "return=representation"},
-                json=datos,
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase POST chequeos_bienestar [{resp.status_code}]: {resp.text}")
-                return None
-            creados = resp.json()
-            return creados[0] if creados else None
-        except Exception as e:
-            print("Error de red (guardar chequeo bienestar):", repr(e))
-            return None
+
+        return guardar_chequeo_bienestar_supabase(datos)
 
     def _dias_desde_ultimo_chequeo_bienestar(chequeos):
         # None = todavía no hizo ninguno (distinto de "0 días", que sí es
@@ -6241,21 +4708,11 @@ def main(page: ft.Page):
     def obtener_ejercicios_reappraisal():
         if estado["modo_local"]:
             return estado["_reappraisal_locales"]
-        try:
-            resp = requests.get(
-                SUPABASE_REAPPRAISAL_URL,
-                headers=HEADERS,
-                params={"usuario_id": f"eq.{estado['usuario_id']}", "select": "*", "order": "fecha.desc"},
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase GET ejercicios_reappraisal [{resp.status_code}]: {resp.text}")
-                return None
-            return resp.json()
-        except Exception as e:
-            print("Error de red (ejercicios_reappraisal):", repr(e))
-            return None
 
+        return obtener_ejercicios_reappraisal_supabase(
+            estado["usuario_id"]
+        )
+    
     def guardar_ejercicio_reappraisal(modo, categoria, situacion_texto, paso_pensamiento, paso_hechos, paso_tercero, paso_temporal, tema_id=None):
         datos = {
             "usuario_id": estado["usuario_id"],
@@ -6273,21 +4730,8 @@ def main(page: ft.Page):
             datos["fecha"] = datetime.now().isoformat()
             estado["_reappraisal_locales"].insert(0, datos)
             return datos
-        try:
-            resp = requests.post(
-                SUPABASE_REAPPRAISAL_URL,
-                headers={**HEADERS, "Prefer": "return=representation"},
-                json=datos,
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase POST ejercicios_reappraisal [{resp.status_code}]: {resp.text}")
-                return None
-            creados = resp.json()
-            return creados[0] if creados else None
-        except Exception as e:
-            print("Error de red (guardar ejercicio reappraisal):", repr(e))
-            return None
+
+        return guardar_ejercicio_reappraisal_supabase(datos)
 
     def contar_inventadas_completadas():
         ejercicios = obtener_ejercicios_reappraisal()
@@ -6447,18 +4891,11 @@ def main(page: ft.Page):
     def guardar_cosmetico_supabase(campo, valor):
         if estado["modo_local"]:
             return True
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_USUARIOS_URL}?id=eq.{estado['usuario_id']}",
-                headers=HEADERS,
-                json={campo: valor},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print(f"Error de red (guardar {campo}):", e)
-            return False
+
+        return actualizar_usuario(
+            estado["usuario_id"],
+            {campo: valor},
+        )
 
     def mostrar_elegir_flor_tema(tema):
         pantalla(ft.ProgressRing(), ft.Text("Cargando...", color=COLOR_PRIMARIO), mostrar_volver=True)
@@ -7313,18 +5750,11 @@ def main(page: ft.Page):
     def guardar_instrucciones_bienestar_vistas_supabase():
         if estado["modo_local"]:
             return True
-        try:
-            resp = requests.patch(
-                f"{SUPABASE_USUARIOS_URL}?id=eq.{estado['usuario_id']}",
-                headers=HEADERS,
-                json={"vio_instrucciones_bienestar": True},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except Exception as e:
-            print("Error de red (guardar vio_instrucciones_bienestar):", e)
-            return False
+
+        return actualizar_usuario(
+            estado["usuario_id"],
+            {"vio_instrucciones_bienestar": True},
+        )
 
     def mostrar_instrucciones_bienestar(permitir_volver=False):
         def continuar(e):
@@ -7821,20 +6251,10 @@ def main(page: ft.Page):
     def obtener_reportes_usuario():
         if estado["modo_local"]:
             return estado["_reportes_locales"]
-        try:
-            resp = requests.get(
-                SUPABASE_REPORTES_URL,
-                headers=HEADERS,
-                params={"usuario_id": f"eq.{estado['usuario_id']}", "select": "*", "order": "fecha.desc"},
-                timeout=10,
-            )
-            if not resp.ok:
-                print(f"Error Supabase GET reportes_emocionales [{resp.status_code}]: {resp.text}")
-                return None
-            return resp.json()
-        except Exception as e:
-            print("Error de red (historial):", repr(e))
-            return None
+
+        return obtener_reportes_usuario_supabase(
+            estado["usuario_id"]
+        )
 
     def mostrar_compartir_historial(reportes):
         csv_contenido = generar_csv_historial(reportes)

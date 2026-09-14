@@ -1,0 +1,37 @@
+# ==========================================================
+# PALETA GENERAL DRE
+# ==========================================================
+
+COLOR_FONDO = "#E8DBC0"
+COLOR_TARJETA = "#FFFAF0"
+COLOR_PRIMARIO = "#3D7A7B"
+COLOR_PRIMARIO_OSCURO = "#2C5F60"
+COLOR_CAJA_SUAVE = "#E4D2AE"
+COLOR_CAJA_INFO = "#CCE3DD"
+COLOR_EXITO = "#4F8F6D"
+COLOR_EXITO_CAJA = "#D2E9DA"
+COLOR_DORADO = "#C79433"
+COLOR_TEXTO_FUERTE = "#352F27"
+COLOR_TEXTO_MEDIO = "#665C4C"
+COLOR_TEXTO_SUAVE = "#8A7C68"
+
+
+# ==========================================================
+# PALETA MENTO
+# ==========================================================
+
+MENTO_ROSA = "#FFC7D1"
+MENTO_ROSA_TEXTO = "#F36E86"
+MENTO_VERDE = "#52B788"
+MENTO_VERDE_OSCURO = "#00C49A"
+MENTO_AMARILLO = "#FFC832"
+MENTO_AMARILLO_CLARO = "#FED45F"
+MENTO_CELESTE = "#0096C7"
+MENTO_CELESTE_CAJA = "#C7EAF5"
+MENTO_NARANJA = "#FE814A"
+
+MENTO_EXITO_JUEGO = "#5CD98C"
+MENTO_ERROR_JUEGO = "#FF6464"
+MENTO_SELECCION_JUEGO = "#F9B702"
+
+MENTO_FUENTE = "Poppins"
