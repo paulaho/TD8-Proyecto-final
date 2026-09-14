@@ -3625,8 +3625,8 @@ def main(page: ft.Page):
 
             niveles = await asyncio.to_thread(
                 generar_batch_familia_ia_adaptativo,
-                estado,
                 historial_5,
+                estado,
             )
 
             estado["_siguiente_batch_ia"] = niveles
@@ -3663,6 +3663,7 @@ def main(page: ft.Page):
                 niveles = await asyncio.to_thread(
                     generar_batch_familia_ia_adaptativo,
                     estado["_historial_ia"],
+                    estado,
                 )
 
             else:
@@ -3670,9 +3671,9 @@ def main(page: ft.Page):
                 print("Generando primer batch")
 
                 niveles = await asyncio.to_thread(
-                    generar_batch_familia_ia
+                    generar_batch_familia_ia,
+                    estado,
                 )
-
             estado["_niveles_ia_batch"] = niveles
             estado["_nivel_ia_actual"] = 0
 
