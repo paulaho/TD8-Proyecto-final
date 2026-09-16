@@ -2137,7 +2137,7 @@ def main(page: ft.Page):
             estado["_batch_ia_generando"] = False
 
 
-    async def precargar_siguiente_batch_ia(historial_5):
+    async def precargar_siguiente_batch_ia(historial_reciente):
 
         if estado.get("_siguiente_batch_ia"):
             return
@@ -2152,7 +2152,7 @@ def main(page: ft.Page):
 
             niveles = await asyncio.to_thread(
                 generar_batch_familia_ia_adaptativo,
-                historial_5,
+                historial_reciente,
                 estado,
             )
 
@@ -2407,15 +2407,15 @@ def main(page: ft.Page):
 
                             guardar_resultado_ia(dato)
 
-                            # Cuando termina el ejercicio 5,
-                            # generar los próximos 10 usando SOLO esos 5 resultados
-                            if indice_nivel == 4:
+                            # Cuando termina el ejercicio 7 (índice 6),
+                            # generar los próximos 10 usando las 7 respuestas previas
+                            if indice_nivel == 6:
 
-                                historial_5 = estado["_historial_ia"][-5:].copy()
+                                historial_7 = estado["_historial_ia"][-7:].copy()
 
                                 page.run_task(
                                     precargar_siguiente_batch_ia,
-                                    historial_5,
+                                    historial_7,
                                 )
 
                             mostrar_reappraisal_juego_ia(

@@ -4,8 +4,8 @@ import os
 # SUPABASE
 # ==========================================================
 
-SUPABASE_BASE_URL = "https://wtevnqwkvkposusqraph.supabase.co/rest/v1"
-SUPABASE_KEY = "sb_publishable_olUJCGB-IsB7lYI0k3sSuA_Qfej5kmi"
+SUPABASE_BASE_URL = "https://gyyasawienzzloipzugd.supabase.co/rest/v1/"
+SUPABASE_KEY = "sb_publishable_qBb1HA1PR8Z6sR24yH-fDw_rat1Hozp"
 
 SUPABASE_USUARIOS_URL = f"{SUPABASE_BASE_URL}/usuarios_regulacion"
 SUPABASE_REPORTES_URL = f"{SUPABASE_BASE_URL}/reportes_emocionales"
