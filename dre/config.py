@@ -1,11 +1,16 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ==========================================================
 # SUPABASE
 # ==========================================================
 
-SUPABASE_BASE_URL = "https://wtevnqwkvkposusqraph.supabase.co/rest/v1"
-SUPABASE_KEY = "sb_publishable_olUJCGB-IsB7lYI0k3sSuA_Qfej5kmi"
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+
+SUPABASE_BASE_URL = f"{SUPABASE_URL}/rest/v1"
 
 SUPABASE_USUARIOS_URL = f"{SUPABASE_BASE_URL}/usuarios_regulacion"
 SUPABASE_REPORTES_URL = f"{SUPABASE_BASE_URL}/reportes_emocionales"

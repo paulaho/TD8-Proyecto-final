@@ -52,6 +52,7 @@ from dre.seguridad import (
     detectar_riesgo_terceros,
     generar_salt,
     hash_contrasena,
+    _sin_acentos,
 )
 
 from dre.contenido import (

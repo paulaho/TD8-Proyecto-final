@@ -58,7 +58,7 @@ def obtener_temas_usuario_supabase(usuario_id):
             params={
                 "usuario_id": f"eq.{usuario_id}",
                 "select": "*",
-                "order": "created_at.desc",
+                "order": "creado_en.desc",
             },
             timeout=10,
         )
