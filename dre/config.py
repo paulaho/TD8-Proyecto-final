@@ -10,7 +10,7 @@ load_dotenv()
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-SUPABASE_BASE_URL = f"{SUPABASE_URL}/rest/v1"
+SUPABASE_BASE_URL = f"{SUPABASE_URL}/rest/v1">>>>>>> 4842f4d91711339ecbe67f3ee5c0d4c0631edb47
 
 SUPABASE_USUARIOS_URL = f"{SUPABASE_BASE_URL}/usuarios_regulacion"
 SUPABASE_REPORTES_URL = f"{SUPABASE_BASE_URL}/reportes_emocionales"

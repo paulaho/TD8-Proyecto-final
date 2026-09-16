@@ -1,4 +1,5 @@
 import json
+import random
 
 from google import genai
 from pydantic import BaseModel, Field
@@ -226,5 +227,11 @@ def validar_nivel_ia(ejercicio):
 
     if indice_correcto < 0 or indice_correcto >= len(ejercicio["opciones"]):
         raise ValueError("El índice de la respuesta correcta no es válido")
+
+    # Mezclar las opciones aleatoriamente para evitar sesgos de la IA
+    texto_correcto = ejercicio["opciones"][indice_correcto]
+    random.shuffle(ejercicio["opciones"])
+    nuevo_indice_correcto = ejercicio["opciones"].index(texto_correcto)
+    ejercicio["correctas"] = [nuevo_indice_correcto]
 
     return ejercicio
