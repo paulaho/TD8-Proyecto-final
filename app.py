@@ -2589,8 +2589,6 @@ def main(page: ft.Page):
 
         renderizar()
         
-    def mostrar_reappraisal_juegos_niveles(categoria_clave):
-
     # ==========================================================
     # MODO TEXTO LIBRE — Pre-carga y recarga de batches
     # ==========================================================
