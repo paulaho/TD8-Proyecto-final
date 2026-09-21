@@ -289,3 +289,4 @@ def evaluar_batch_texto_libre(ejercicios):
         )
 
     return correcciones
+

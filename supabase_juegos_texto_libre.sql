@@ -37,3 +37,4 @@ alter table sesiones_texto_libre disable row level security;
 
 -- Si la tabla ya existía y hay que agregar columnas nuevas sin perder datos:
 -- alter table sesiones_texto_libre add column if not exists categoria text not null default 'familia';
+
