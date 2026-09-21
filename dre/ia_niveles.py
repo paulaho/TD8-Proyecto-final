@@ -28,12 +28,23 @@ class EjercicioFamiliaIA(BaseModel):
 class BatchEjerciciosFamiliaIA(BaseModel):
     niveles: List[EjercicioFamiliaIA]
 
-gemini_client = genai.Client()
+try:
+    gemini_client = genai.Client()
+except Exception:
+    gemini_client = None
+
+def _obtener_gemini_client():
+    global gemini_client
+    if gemini_client is None:
+        gemini_client = genai.Client()
+    return gemini_client
 
 def generar_batch_familia_ia(estado):
     # Extraemos la información del test inicial guardada en el estado
     contexto = estado.get("perfil_contexto", {})
     genero = estado.get("genero", "no especificado")
+    nivel_reg = contexto.get("nivel_regulacion", 1)
+    familiaridad = contexto.get("familiaridad_regulacion", "No especificado")
 
     # Inyectamos las variables con f""" dentro del prompt
     prompt = f"""
@@ -50,6 +61,12 @@ def generar_batch_familia_ia(estado):
     - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
     - Ocupación: {contexto.get('ocupacion', 'No especificado')}
     - Estado en pareja: {contexto.get('pareja', 'No especificado')}
+    - Nivel de familiaridad con Regulación Emocional: Nivel {nivel_reg} ({familiaridad})
+
+    PAUTAS DE ADAPTACIÓN SEGÚN EL NIVEL:
+    - Si es Nivel 1: situaciones cotidianas muy claras, lenguaje empático y accesible, sin tecnicismos.
+    - Si es Nivel 2: foco en notar sesgos automáticos del día a día y construir interpretaciones más funcionales.
+    - Si es Nivel 3: ejercicios de reevaluación cognitiva con matices más sutiles y desafiantes frente a sesgos automáticos.
 
     Los 10 ejercicios deben tener dificultad progresiva:
     - Los primeros ejercicios deben ser más simples.
@@ -73,7 +90,8 @@ def generar_batch_familia_ia(estado):
     - "correctas" debe contener el índice de la opción correcta empezando desde 0.
     """
 
-    response = gemini_client.models.generate_content(
+    client = _obtener_gemini_client()
+    response = client.models.generate_content(
         model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
@@ -108,6 +126,8 @@ def generar_batch_familia_ia(estado):
 def generar_batch_familia_ia_adaptativo(historial, estado):
     contexto = estado.get("perfil_contexto", {})
     genero = estado.get("genero", "no especificado")
+    nivel_reg = contexto.get("nivel_regulacion", 1)
+    familiaridad = contexto.get("familiaridad_regulacion", "No especificado")
 
     historial_texto = json.dumps(
         historial,
@@ -129,6 +149,12 @@ def generar_batch_familia_ia_adaptativo(historial, estado):
     - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
     - Ocupación: {contexto.get('ocupacion', 'No especificado')}
     - Estado en pareja: {contexto.get('pareja', 'No especificado')}
+    - Nivel de familiaridad con Regulación Emocional: Nivel {nivel_reg} ({familiaridad})
+
+    PAUTAS DE ADAPTACIÓN SEGÚN EL NIVEL:
+    - Si es Nivel 1: situaciones cotidianas muy claras, lenguaje empático y accesible, sin tecnicismos.
+    - Si es Nivel 2: foco en notar sesgos automáticos del día a día y construir interpretaciones más funcionales.
+    - Si es Nivel 3: ejercicios de reevaluación cognitiva con matices más sutiles y desafiantes frente a sesgos automáticos.
 
     El usuario ya realizó ejercicios anteriormente.
 
@@ -177,7 +203,8 @@ def generar_batch_familia_ia_adaptativo(historial, estado):
     empezando desde 0.
     """
 
-    response = gemini_client.models.generate_content(
+    client = _obtener_gemini_client()
+    response = client.models.generate_content(
         model="gemini-3.5-flash-lite",
         contents=prompt,
         config={

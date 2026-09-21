@@ -23,6 +23,8 @@ create table if not exists usuarios_regulacion (
     cosmetico_planta text,            -- flor elegida en Personalización para las plantas en flor (emoji)
     cosmetico_fondo text,             -- florcita elegida para la decoración del menú principal (emoji)
     color_fondo text,                 -- color de fondo de pantalla elegido en Personalización (hex)
+    realizo_test_inicial boolean not null default false, -- si ya completó el test inicial
+    perfil_contexto jsonb,            -- respuestas del test inicial (contexto familiar y nivel de regulación)
     creado_en timestamptz not null default now()
 );
 
@@ -40,3 +42,5 @@ create table if not exists usuarios_regulacion (
 -- alter table usuarios_regulacion add column if not exists cosmetico_planta text;
 -- alter table usuarios_regulacion add column if not exists cosmetico_fondo text;
 -- alter table usuarios_regulacion add column if not exists color_fondo text;
+-- alter table usuarios_regulacion add column if not exists realizo_test_inicial boolean not null default false;
+-- alter table usuarios_regulacion add column if not exists perfil_contexto jsonb;

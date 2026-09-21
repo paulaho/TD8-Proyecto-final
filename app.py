@@ -73,6 +73,12 @@ from dre.ia_niveles import (
     generar_batch_familia_ia_adaptativo,
 )
 
+from dre.ia_texto_libre import (
+    generar_batch_texto_libre,
+    generar_batch_texto_libre_adaptativo,
+    evaluar_batch_texto_libre,
+)
+
 from dre.recomendaciones import (
     RECOMENDACIONES_POR_EMOCION,
     RECOMENDACIONES_DUELO,
@@ -177,6 +183,7 @@ from dre.supabase_reappraisal import (
 from dre.supabase_juegos import (
     obtener_progreso_juegos_supabase,
     marcar_nivel_juego_completado_supabase,
+    guardar_sesion_texto_libre_supabase,
 )
 
 import flet as ft
@@ -427,6 +434,15 @@ def main(page: ft.Page):
         "_errores_nivel_ia": [],       # <-- 
         "realizo_test_inicial": False,  # <-- TEMP TEST
         "perfil_contexto": {},          # <-- TEMP TEST
+        # --- MODO TEXTO LIBRE ---
+        "_tl_batches_queue": [],        # cola de batches pre-generados (lista de listas de 5 situaciones)
+        "_tl_batch_actual": [],         # batch en juego (5 situaciones con situacion + reappraisal_inicial)
+        "_tl_batch_generando": False,   # lock para no generar dos veces en paralelo
+        "_tl_batches_jugados": 0,       # contador absoluto de batches completados (para trigger de recarga)
+        "_tl_historial": [],            # historial de desempeño para batches adaptativos
+        "_tl_fase1_respuestas": [],     # contraargumentos escritos por el usuario en Fase 1
+        "_tl_fase2_respuestas": [],     # nuevos reappraisals escritos por el usuario en Fase 2
+        "_tl_correcciones": [],         # feedback de la IA (lista de dicts con "feedback")
     }
 
     # ==========================================================
@@ -644,10 +660,12 @@ def main(page: ft.Page):
 
         else:
             page.run_task(precargar_batch_ia)
+            page.run_task(precargar_batches_texto_libre)
             ir_a(mostrar_menu_principal)
 
     def finalizar_test_inicial():
         page.run_task(precargar_batch_ia)
+        page.run_task(precargar_batches_texto_libre)
         ir_a_menu_principal()
 
     def entrar_con_usuario(usuario, local=False):
@@ -2572,6 +2590,998 @@ def main(page: ft.Page):
         renderizar()
         
     def mostrar_reappraisal_juegos_niveles(categoria_clave):
+
+    # ==========================================================
+    # MODO TEXTO LIBRE — Pre-carga y recarga de batches
+    # ==========================================================
+
+    async def precargar_batches_texto_libre():
+        """
+        Genera 3 batches de 5 situaciones c/u en segundo plano al arrancar.
+        Se dispara al completar el test inicial o al entrar si ya lo completó.
+        """
+        if estado.get("_tl_batches_queue") and len(estado["_tl_batches_queue"]) >= 3:
+            return
+        if estado.get("_tl_batch_generando"):
+            return
+
+        estado["_tl_batch_generando"] = True
+        try:
+            print("Precargando 3 batches de texto libre en background...")
+            nuevos = []
+            for i in range(3):
+                if estado.get("_tl_historial") and i > 0:
+                    batch = await asyncio.to_thread(
+                        generar_batch_texto_libre_adaptativo,
+                        estado["_tl_historial"],
+                        estado,
+                    )
+                else:
+                    batch = await asyncio.to_thread(
+                        generar_batch_texto_libre,
+                        estado,
+                    )
+                nuevos.append(batch)
+                print(f"  Batch texto libre {i + 1}/3 generado")
+            estado["_tl_batches_queue"].extend(nuevos)
+            print(f"Precarga completa: {len(estado['_tl_batches_queue'])} batches disponibles")
+        except Exception as e:
+            print("Error precargando batches texto libre:", repr(e))
+        finally:
+            estado["_tl_batch_generando"] = False
+
+    async def recargar_batches_texto_libre():
+        """
+        Genera 3 nuevos batches adaptativos en segundo plano cuando se
+        dispara la lógica de recarga (al completar el 2do batch de cada grupo).
+        """
+        if estado.get("_tl_batch_generando"):
+            return
+
+        estado["_tl_batch_generando"] = True
+        try:
+            print("Recargando 3 batches adaptativos de texto libre...")
+            nuevos = []
+            for i in range(3):
+                batch = await asyncio.to_thread(
+                    generar_batch_texto_libre_adaptativo,
+                    estado.get("_tl_historial", []),
+                    estado,
+                )
+                nuevos.append(batch)
+                print(f"  Batch adaptativo texto libre {i + 1}/3 generado")
+            estado["_tl_batches_queue"].extend(nuevos)
+            print(f"Recarga completa: {len(estado['_tl_batches_queue'])} batches disponibles")
+        except Exception as e:
+            print("Error recargando batches texto libre:", repr(e))
+        finally:
+            estado["_tl_batch_generando"] = False
+
+    # ==========================================================
+    # MODO TEXTO LIBRE — Tutorial
+    # ==========================================================
+
+    def mostrar_tutorial_texto_libre():
+        """
+        Explica la mecánica del modo texto libre con un ejemplo estático
+        concreto. Se muestra solo una vez por sesión.
+        """
+        def continuar(e):
+            estado["_tl_vio_tutorial"] = True
+            ir_a(_iniciar_modo_escritura)
+
+        pantalla(
+            ft.Icon(ft.Icons.EDIT_NOTE, size=56, color=MENTO_CELESTE),
+            ft.Text(
+                "Modo Escritura",
+                size=24,
+                weight=ft.FontWeight.BOLD,
+                text_align=ft.TextAlign.CENTER,
+                font_family=MENTO_FUENTE,
+            ),
+            ft.Text(
+                "En este modo vas a leer una situación y su reappraisal, "
+                "escribir tu propio contraargumento, y luego construir un "
+                "nuevo reappraisal que integre tu objeción. La IA te da "
+                "feedback al final.",
+                size=14,
+                color=COLOR_TEXTO_MEDIO,
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "Ejemplo",
+                            weight=ft.FontWeight.BOLD,
+                            size=13,
+                            color=MENTO_CELESTE,
+                            font_family=MENTO_FUENTE,
+                        ),
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text(
+                                        "📍 Situación",
+                                        weight=ft.FontWeight.W_600,
+                                        size=12,
+                                        color=COLOR_TEXTO_FUERTE,
+                                    ),
+                                    ft.Text(
+                                        "En una cena familiar, le contás a tu hermano un proyecto que te "
+                                        "entusiasma mucho y te responde diciendo que deberías buscarte un "
+                                        "trabajo más seguro.",
+                                        size=13,
+                                        color=COLOR_TEXTO_FUERTE,
+                                    ),
+                                ],
+                                spacing=4,
+                            ),
+                            padding=10,
+                            border_radius=8,
+                            bgcolor=MENTO_AMARILLO_CLARO,
+                        ),
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text(
+                                        "💭 Reappraisal inicial",
+                                        weight=ft.FontWeight.W_600,
+                                        size=12,
+                                        color=COLOR_TEXTO_FUERTE,
+                                    ),
+                                    ft.Text(
+                                        "A lo mejor me lo dice desde su propia inseguridad y preocupación "
+                                        "por mi bienestar, no porque quiera tirarme abajo.",
+                                        size=13,
+                                        color=COLOR_TEXTO_FUERTE,
+                                    ),
+                                ],
+                                spacing=4,
+                            ),
+                            padding=10,
+                            border_radius=8,
+                            bgcolor=MENTO_CELESTE_CAJA,
+                        ),
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text(
+                                        "✍️ Tu contraargumento",
+                                        weight=ft.FontWeight.W_600,
+                                        size=12,
+                                        color=COLOR_TEXTO_FUERTE,
+                                    ),
+                                    ft.Text(
+                                        "Pero si confiara en mí, me apoyaría en lugar de dudar de lo que "
+                                        "puedo hacer.",
+                                        size=13,
+                                        color=COLOR_TEXTO_FUERTE,
+                                    ),
+                                ],
+                                spacing=4,
+                            ),
+                            padding=10,
+                            border_radius=8,
+                            bgcolor=COLOR_CAJA_SUAVE,
+                        ),
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text(
+                                        "🔄 Nuevo Reappraisal",
+                                        weight=ft.FontWeight.W_600,
+                                        size=12,
+                                        color=COLOR_TEXTO_FUERTE,
+                                    ),
+                                    ft.Text(
+                                        "Es comprensible que quiera apoyarme, pero su forma de expresar "
+                                        "cuidado es previniendo riesgos; que tenga dudas no significa que "
+                                        "yo no sea capaz de lograrlo.",
+                                        size=13,
+                                        color=COLOR_TEXTO_FUERTE,
+                                    ),
+                                ],
+                                spacing=4,
+                            ),
+                            padding=10,
+                            border_radius=8,
+                            bgcolor=COLOR_CAJA_INFO,
+                        ),
+                        ft.Container(
+                            content=ft.Text(
+                                "✅ ¡Excelente reencuadre! Pudiste separar el afecto y la intención de tu "
+                                "hermano de tus propias capacidades sin caer en positivismo mágico.",
+                                size=13,
+                                color=COLOR_TEXTO_FUERTE,
+                                italic=True,
+                            ),
+                            padding=10,
+                            border_radius=8,
+                            bgcolor=COLOR_EXITO_CAJA,
+                        ),
+                    ],
+                    spacing=8,
+                ),
+                padding=14,
+                border_radius=14,
+                bgcolor=ft.Colors.with_opacity(0.5, COLOR_CAJA_SUAVE),
+                width=ancho_campo(360),
+            ),
+            ft.ElevatedButton(
+                "¡Entendido, jugar!",
+                icon=ft.Icons.PLAY_ARROW,
+                on_click=continuar,
+                width=ancho_campo(),
+                height=50,
+                bgcolor=MENTO_CELESTE,
+                color=ft.Colors.WHITE,
+            ),
+        )
+
+    # ==========================================================
+    # MODO TEXTO LIBRE — Entrada al juego
+    # ==========================================================
+
+    async def _iniciar_modo_escritura():
+        """
+        Consume el primer batch de la cola y arranca la Fase 1.
+        Si no hay batches todavía, espera la precarga.
+        """
+        # Si hay batches en la cola, tomar el primero
+        if estado.get("_tl_batches_queue"):
+            estado["_tl_batch_actual"] = estado["_tl_batches_queue"].pop(0)
+            estado["_tl_fase1_respuestas"] = [""] * 5
+            estado["_tl_fase2_respuestas"] = [""] * 5
+            estado["_tl_correcciones"] = []
+            mostrar_texto_libre_fase1(0)
+            return
+
+        # Si se está generando, esperar
+        if estado.get("_tl_batch_generando"):
+            pantalla(
+                ft.ProgressRing(),
+                ft.Text(
+                    "Preparando tu próximo bloque...",
+                    text_align=ft.TextAlign.CENTER,
+                ),
+            )
+            while estado.get("_tl_batch_generando"):
+                await asyncio.sleep(0.2)
+
+            if estado.get("_tl_batches_queue"):
+                estado["_tl_batch_actual"] = estado["_tl_batches_queue"].pop(0)
+                estado["_tl_fase1_respuestas"] = [""] * 5
+                estado["_tl_fase2_respuestas"] = [""] * 5
+                estado["_tl_correcciones"] = []
+                mostrar_texto_libre_fase1(0)
+                return
+
+        # Si no hay nada, generar en el momento
+        pantalla(
+            ft.ProgressRing(),
+            ft.Text(
+                "Generando situaciones personalizadas...",
+                text_align=ft.TextAlign.CENTER,
+            ),
+        )
+        try:
+            if estado.get("_tl_historial"):
+                batch = await asyncio.to_thread(
+                    generar_batch_texto_libre_adaptativo,
+                    estado["_tl_historial"],
+                    estado,
+                )
+            else:
+                batch = await asyncio.to_thread(
+                    generar_batch_texto_libre,
+                    estado,
+                )
+            estado["_tl_batch_actual"] = batch
+            estado["_tl_fase1_respuestas"] = [""] * 5
+            estado["_tl_fase2_respuestas"] = [""] * 5
+            estado["_tl_correcciones"] = []
+            mostrar_texto_libre_fase1(0)
+        except Exception as e:
+            print("Error generando batch en el momento:", repr(e))
+            pantalla(
+                ft.Icon(ft.Icons.ERROR_OUTLINE, size=50, color=ft.Colors.RED),
+                ft.Text(
+                    "No pudimos generar las situaciones. Revisá tu conexión e intentá de nuevo.",
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                ft.ElevatedButton(
+                    "Reintentar",
+                    on_click=lambda _: page.run_task(_iniciar_modo_escritura),
+                    width=ancho_campo(),
+                    height=48,
+                ),
+            )
+
+    def abrir_modo_escritura(e):
+        if not estado.get("_tl_vio_tutorial"):
+            ir_a(mostrar_tutorial_texto_libre)
+        else:
+            page.run_task(_iniciar_modo_escritura)
+
+    # ==========================================================
+    # MODO TEXTO LIBRE — Fase 1: Contraargumentos
+    # ==========================================================
+
+    def mostrar_texto_libre_fase1(indice):
+        """
+        Muestra una situación y su reappraisal inicial en sub-pasos progresivos.
+        El usuario escribe su contraargumento y avanza a la siguiente situación.
+        """
+        situacion = estado["_tl_batch_actual"][indice]
+        sub_paso = {"valor": 0}          # 0: solo situación | 1: +reappraisal | 2: +campo de texto
+        texto_contraarg = {"valor": ""}
+
+        def renderizar():
+            controles = [
+                ft.Text(
+                    f"✍️ Fase 1 — Situación {indice + 1} de 5",
+                    weight=ft.FontWeight.BOLD,
+                    color=MENTO_CELESTE,
+                    font_family=MENTO_FUENTE,
+                ),
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Text(
+                                "📍 Situación",
+                                weight=ft.FontWeight.W_600,
+                                size=12,
+                                color=COLOR_TEXTO_FUERTE,
+                            ),
+                            ft.Text(
+                                situacion["situacion"],
+                                size=14,
+                                color=COLOR_TEXTO_FUERTE,
+                            ),
+                        ],
+                        spacing=6,
+                    ),
+                    padding=14,
+                    border_radius=12,
+                    bgcolor=MENTO_AMARILLO_CLARO,
+                    width=ancho_campo(),
+                ),
+            ]
+
+            if sub_paso["valor"] >= 1:
+                controles.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Text(
+                                    "💭 Reappraisal inicial",
+                                    weight=ft.FontWeight.W_600,
+                                    size=12,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                                ft.Text(
+                                    situacion["reappraisal_inicial"],
+                                    size=14,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                            ],
+                            spacing=6,
+                        ),
+                        padding=14,
+                        border_radius=12,
+                        bgcolor=MENTO_CELESTE_CAJA,
+                        width=ancho_campo(),
+                    )
+                )
+
+            if sub_paso["valor"] == 0:
+                controles.append(
+                    ft.ElevatedButton(
+                        "Ver reappraisal →",
+                        on_click=lambda _: _avanzar_subpaso(1),
+                        width=ancho_campo(),
+                        height=48,
+                        bgcolor=MENTO_CELESTE,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            elif sub_paso["valor"] == 1:
+                controles.append(
+                    ft.ElevatedButton(
+                        "✍️ Escribir mi contraargumento",
+                        on_click=lambda _: _avanzar_subpaso(2),
+                        width=ancho_campo(),
+                        height=48,
+                        bgcolor=MENTO_NARANJA,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            elif sub_paso["valor"] == 2:
+                campo_ref = ft.TextField(
+                    label="Tu contraargumento",
+                    hint_text="¿Qué le objetarías a ese reappraisal?",
+                    multiline=True,
+                    min_lines=3,
+                    max_lines=6,
+                    value=texto_contraarg["valor"],
+                    width=ancho_campo(),
+                    on_change=lambda e: texto_contraarg.update({"valor": e.control.value}),
+                )
+                controles.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Text(
+                                    "✍️ Tu contraargumento",
+                                    weight=ft.FontWeight.W_600,
+                                    size=12,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                                ft.Text(
+                                    "Escribí una objeción válida al reappraisal. No tiene que ser "
+                                    "perfecta; tiene que ser honesta.",
+                                    size=12,
+                                    color=COLOR_TEXTO_MEDIO,
+                                ),
+                                campo_ref,
+                            ],
+                            spacing=6,
+                        ),
+                        padding=14,
+                        border_radius=12,
+                        bgcolor=COLOR_CAJA_SUAVE,
+                        width=ancho_campo(),
+                    )
+                )
+
+                es_ultimo = indice == 4
+                txt_boton = "Pasar a la Fase 2 →" if es_ultimo else f"Siguiente situación ({indice + 2}/5) →"
+
+                def guardar_y_avanzar(e):
+                    texto = texto_contraarg["valor"].strip()
+                    if not texto:
+                        return
+                    estado["_tl_fase1_respuestas"][indice] = texto
+                    if es_ultimo:
+                        ir_a(mostrar_transicion_fase2)
+                    else:
+                        ir_a(lambda: mostrar_texto_libre_fase1(indice + 1))
+
+                controles.append(
+                    ft.ElevatedButton(
+                        txt_boton,
+                        icon=ft.Icons.ARROW_FORWARD,
+                        on_click=guardar_y_avanzar,
+                        width=ancho_campo(),
+                        height=48,
+                        bgcolor=MENTO_VERDE_OSCURO,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            pantalla(*controles, mostrar_volver=(indice == 0 and sub_paso["valor"] == 0))
+
+        def _avanzar_subpaso(nuevo):
+            sub_paso["valor"] = nuevo
+            renderizar()
+
+        renderizar()
+
+    # ==========================================================
+    # MODO TEXTO LIBRE — Transición entre fases
+    # ==========================================================
+
+    def mostrar_transicion_fase2():
+        """
+        Pantalla explicativa entre Fase 1 y Fase 2.
+        """
+        def continuar(e):
+            ir_a(lambda: mostrar_texto_libre_fase2(0))
+
+        pantalla(
+            ft.Icon(ft.Icons.AUTORENEW, size=52, color=MENTO_CELESTE),
+            ft.Text(
+                "¡Muy bien! Completaste la Fase 1",
+                size=20,
+                weight=ft.FontWeight.BOLD,
+                text_align=ft.TextAlign.CENTER,
+                font_family=MENTO_FUENTE,
+            ),
+            ft.Text(
+                "Escribiste contraargumentos para las 5 situaciones. Ahora viene la parte clave:",
+                color=COLOR_TEXTO_MEDIO,
+                text_align=ft.TextAlign.CENTER,
+                size=14,
+            ),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "En la Fase 2 vas a escribir un nuevo reappraisal para cada situación, "
+                            "teniendo en cuenta tanto el reappraisal inicial como tu propia objeción.",
+                            size=14,
+                            color=COLOR_TEXTO_FUERTE,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.Text(
+                            "La idea es que el nuevo reappraisal sea más completo: que integre tu "
+                            "duda en vez de ignorarla.",
+                            size=13,
+                            color=COLOR_TEXTO_MEDIO,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                    ],
+                    spacing=8,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=16,
+                border_radius=12,
+                bgcolor=COLOR_CAJA_INFO,
+                width=ancho_campo(),
+            ),
+            ft.ElevatedButton(
+                "Comenzar Fase 2 →",
+                icon=ft.Icons.PLAY_ARROW,
+                on_click=continuar,
+                width=ancho_campo(),
+                height=50,
+                bgcolor=MENTO_CELESTE,
+                color=ft.Colors.WHITE,
+            ),
+            mostrar_volver=False,
+        )
+
+    # ==========================================================
+    # MODO TEXTO LIBRE — Fase 2: Nuevo Reappraisal
+    # ==========================================================
+
+    def mostrar_texto_libre_fase2(indice):
+        """
+        Muestra situación + reappraisal inicial + contraargumento del usuario,
+        y pide escribir el nuevo reappraisal integrador.
+        """
+        situacion = estado["_tl_batch_actual"][indice]
+        contraargumento = estado["_tl_fase1_respuestas"][indice]
+        texto_nuevo_reappraisal = {"valor": ""}
+
+        es_ultimo = indice == 4
+
+        def guardar_y_avanzar(e):
+            texto = texto_nuevo_reappraisal["valor"].strip()
+            if not texto:
+                return
+            estado["_tl_fase2_respuestas"][indice] = texto
+            if es_ultimo:
+                page.run_task(mostrar_texto_libre_evaluando)
+            else:
+                ir_a(lambda: mostrar_texto_libre_fase2(indice + 1))
+
+        txt_boton = "Obtener corrección de la IA 🤖" if es_ultimo else f"Siguiente ({indice + 2}/5) →"
+
+        pantalla(
+            ft.Text(
+                f"🔄 Fase 2 — Situación {indice + 1} de 5",
+                weight=ft.FontWeight.BOLD,
+                color=MENTO_CELESTE,
+                font_family=MENTO_FUENTE,
+            ),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "📍 Situación",
+                            weight=ft.FontWeight.W_600,
+                            size=12,
+                            color=COLOR_TEXTO_FUERTE,
+                        ),
+                        ft.Text(
+                            situacion["situacion"],
+                            size=13,
+                            color=COLOR_TEXTO_FUERTE,
+                        ),
+                    ],
+                    spacing=4,
+                ),
+                padding=12,
+                border_radius=10,
+                bgcolor=MENTO_AMARILLO_CLARO,
+                width=ancho_campo(),
+            ),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "💭 Reappraisal inicial",
+                            weight=ft.FontWeight.W_600,
+                            size=12,
+                            color=COLOR_TEXTO_FUERTE,
+                        ),
+                        ft.Text(
+                            situacion["reappraisal_inicial"],
+                            size=13,
+                            color=COLOR_TEXTO_FUERTE,
+                        ),
+                    ],
+                    spacing=4,
+                ),
+                padding=12,
+                border_radius=10,
+                bgcolor=MENTO_CELESTE_CAJA,
+                width=ancho_campo(),
+            ),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "✍️ Tu contraargumento (Fase 1)",
+                            weight=ft.FontWeight.W_600,
+                            size=12,
+                            color=COLOR_TEXTO_FUERTE,
+                        ),
+                        ft.Text(
+                            contraargumento,
+                            size=13,
+                            color=COLOR_TEXTO_FUERTE,
+                        ),
+                    ],
+                    spacing=4,
+                ),
+                padding=12,
+                border_radius=10,
+                bgcolor=COLOR_CAJA_SUAVE,
+                width=ancho_campo(),
+            ),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "🔄 Tu nuevo reappraisal",
+                            weight=ft.FontWeight.W_600,
+                            size=12,
+                            color=COLOR_TEXTO_FUERTE,
+                        ),
+                        ft.Text(
+                            "Escribí un reappraisal que integre tu contraargumento. "
+                            "Que sea realista, no que ignore tu duda.",
+                            size=12,
+                            color=COLOR_TEXTO_MEDIO,
+                        ),
+                        ft.TextField(
+                            hint_text="Tu nuevo reappraisal...",
+                            multiline=True,
+                            min_lines=3,
+                            max_lines=6,
+                            width=ancho_campo(),
+                            on_change=lambda e: texto_nuevo_reappraisal.update({"valor": e.control.value}),
+                        ),
+                    ],
+                    spacing=6,
+                ),
+                padding=12,
+                border_radius=10,
+                bgcolor=COLOR_CAJA_INFO,
+                width=ancho_campo(),
+            ),
+            ft.ElevatedButton(
+                txt_boton,
+                icon=ft.Icons.SEND if es_ultimo else ft.Icons.ARROW_FORWARD,
+                on_click=guardar_y_avanzar,
+                width=ancho_campo(),
+                height=50,
+                bgcolor=MENTO_ROSA_TEXTO if es_ultimo else MENTO_CELESTE,
+                color=ft.Colors.WHITE,
+            ),
+            mostrar_volver=False,
+        )
+
+    # ==========================================================
+    # MODO TEXTO LIBRE — Evaluación asíncrona
+    # ==========================================================
+
+    async def mostrar_texto_libre_evaluando():
+        """
+        Pantalla de espera mientras la IA evalúa las 5 respuestas en batch.
+        """
+        pantalla(
+            ft.ProgressRing(),
+            ft.Text(
+                "La IA está revisando tus respuestas...",
+                text_align=ft.TextAlign.CENTER,
+                size=16,
+            ),
+            ft.Text(
+                "Esto tarda unos segundos.",
+                text_align=ft.TextAlign.CENTER,
+                color=COLOR_TEXTO_SUAVE,
+                size=13,
+            ),
+            mostrar_volver=False,
+        )
+
+        # Armar los ejercicios completos para la evaluación
+        ejercicios = [
+            {
+                "situacion": estado["_tl_batch_actual"][i]["situacion"],
+                "reappraisal_inicial": estado["_tl_batch_actual"][i]["reappraisal_inicial"],
+                "contraargumento": estado["_tl_fase1_respuestas"][i],
+                "nuevo_reappraisal": estado["_tl_fase2_respuestas"][i],
+            }
+            for i in range(5)
+        ]
+
+        try:
+            correcciones = await asyncio.to_thread(
+                evaluar_batch_texto_libre,
+                ejercicios,
+            )
+            estado["_tl_correcciones"] = correcciones
+
+            # Guardar historial de desempeño para batches adaptativos futuros
+            estado["_tl_historial"].extend([
+                {
+                    "situacion": ejercicios[i]["situacion"],
+                    "reappraisal_inicial": ejercicios[i]["reappraisal_inicial"],
+                    "contraargumento": ejercicios[i]["contraargumento"],
+                    "nuevo_reappraisal": ejercicios[i]["nuevo_reappraisal"],
+                    "feedback": correcciones[i]["feedback"],
+                }
+                for i in range(5)
+            ])
+            # Mantener historial manejable (últimas 15 entradas)
+            if len(estado["_tl_historial"]) > 15:
+                estado["_tl_historial"] = estado["_tl_historial"][-15:]
+
+            # Persistir en Supabase (best-effort, no bloquea si falla)
+            if not estado.get("modo_local"):
+                try:
+                    await asyncio.to_thread(
+                        guardar_sesion_texto_libre_supabase,
+                        estado["usuario_id"],
+                        estado["_tl_batch_actual"],
+                        estado["_tl_fase1_respuestas"],
+                        estado["_tl_fase2_respuestas"],
+                        correcciones,
+                    )
+                except Exception as e_db:
+                    print("Error guardando sesión en Supabase (no crítico):", repr(e_db))
+
+            # Incrementar contador de batches jugados
+            estado["_tl_batches_jugados"] += 1
+
+            # Disparar recarga si se acaba de completar el 2do batch de un grupo de 3
+            # (batches_jugados % 3 == 2 → índices 1, 4, 7, 10, ...)
+            if estado["_tl_batches_jugados"] % 3 == 2:
+                print(f"Trigger de recarga: {estado['_tl_batches_jugados']} batches jugados")
+                page.run_task(recargar_batches_texto_libre)
+
+            mostrar_texto_libre_resultados()
+
+        except Exception as e:
+            print("Error evaluando batch texto libre:", repr(e))
+            pantalla(
+                ft.Icon(ft.Icons.ERROR_OUTLINE, size=50, color=ft.Colors.RED),
+                ft.Text(
+                    "No pudimos obtener la corrección de la IA. Revisá tu conexión.",
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                ft.ElevatedButton(
+                    "Reintentar",
+                    on_click=lambda _: page.run_task(mostrar_texto_libre_evaluando),
+                    width=ancho_campo(),
+                    height=48,
+                ),
+            )
+
+    # ==========================================================
+    # MODO TEXTO LIBRE — Resultados expandibles
+    # ==========================================================
+
+    def mostrar_texto_libre_resultados():
+        """
+        Muestra los 5 ejercicios corregidos. Cada ítem es expandible para
+        ver el contexto completo (situación + reappraisal + contraargumento
+        + nuevo reappraisal + corrección).
+        """
+        expandidos = {i: False for i in range(5)}
+
+        def toggle_item(i):
+            def handler(e):
+                expandidos[i] = not expandidos[i]
+                renderizar()
+            return handler
+
+        def renderizar():
+            items = []
+            for i in range(5):
+                situ = estado["_tl_batch_actual"][i]
+                contraarg = estado["_tl_fase1_respuestas"][i]
+                nuevo_rap = estado["_tl_fase2_respuestas"][i]
+                corr = estado["_tl_correcciones"][i] if estado["_tl_correcciones"] else {"feedback": "—"}
+                feedback = corr.get("feedback", "—")
+
+                # Determinar emoji de estado según el primer carácter del feedback
+                if feedback.startswith("✅"):
+                    badge_color = MENTO_EXITO_JUEGO
+                elif feedback.startswith("⚠️"):
+                    badge_color = MENTO_ERROR_JUEGO
+                else:
+                    badge_color = MENTO_AMARILLO
+
+                resumen = ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Text(
+                                        f"Situación {i + 1}",
+                                        weight=ft.FontWeight.BOLD,
+                                        size=13,
+                                        color=COLOR_TEXTO_FUERTE,
+                                        expand=True,
+                                        font_family=MENTO_FUENTE,
+                                    ),
+                                    ft.Icon(
+                                        ft.Icons.EXPAND_MORE if not expandidos[i] else ft.Icons.EXPAND_LESS,
+                                        color=MENTO_CELESTE,
+                                        size=20,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                            ft.Text(
+                                f"Tu reappraisal: {nuevo_rap[:80]}{'...' if len(nuevo_rap) > 80 else ''}",
+                                size=12,
+                                color=COLOR_TEXTO_MEDIO,
+                            ),
+                            ft.Container(
+                                content=ft.Text(
+                                    feedback,
+                                    size=12,
+                                    color=ft.Colors.WHITE,
+                                    weight=ft.FontWeight.W_600,
+                                ),
+                                padding=ft.Padding.symmetric(horizontal=10, vertical=4),
+                                border_radius=8,
+                                bgcolor=badge_color,
+                            ),
+                        ],
+                        spacing=6,
+                    ),
+                    padding=14,
+                    border_radius=12,
+                    bgcolor=COLOR_CAJA_SUAVE,
+                    width=ancho_campo(),
+                    on_click=toggle_item(i),
+                )
+
+                item_controles = [resumen]
+
+                if expandidos[i]:
+                    detalle = ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Container(
+                                    content=ft.Column(
+                                        [
+                                            ft.Text("📍 Situación", weight=ft.FontWeight.W_600, size=11, color=COLOR_TEXTO_FUERTE),
+                                            ft.Text(situ["situacion"], size=12, color=COLOR_TEXTO_FUERTE),
+                                        ],
+                                        spacing=3,
+                                    ),
+                                    padding=10,
+                                    border_radius=8,
+                                    bgcolor=MENTO_AMARILLO_CLARO,
+                                ),
+                                ft.Container(
+                                    content=ft.Column(
+                                        [
+                                            ft.Text("💭 Reappraisal inicial", weight=ft.FontWeight.W_600, size=11, color=COLOR_TEXTO_FUERTE),
+                                            ft.Text(situ["reappraisal_inicial"], size=12, color=COLOR_TEXTO_FUERTE),
+                                        ],
+                                        spacing=3,
+                                    ),
+                                    padding=10,
+                                    border_radius=8,
+                                    bgcolor=MENTO_CELESTE_CAJA,
+                                ),
+                                ft.Container(
+                                    content=ft.Column(
+                                        [
+                                            ft.Text("✍️ Tu contraargumento", weight=ft.FontWeight.W_600, size=11, color=COLOR_TEXTO_FUERTE),
+                                            ft.Text(contraarg, size=12, color=COLOR_TEXTO_FUERTE),
+                                        ],
+                                        spacing=3,
+                                    ),
+                                    padding=10,
+                                    border_radius=8,
+                                    bgcolor=COLOR_CAJA_SUAVE,
+                                ),
+                                ft.Container(
+                                    content=ft.Column(
+                                        [
+                                            ft.Text("🔄 Tu nuevo reappraisal", weight=ft.FontWeight.W_600, size=11, color=COLOR_TEXTO_FUERTE),
+                                            ft.Text(nuevo_rap, size=12, color=COLOR_TEXTO_FUERTE),
+                                        ],
+                                        spacing=3,
+                                    ),
+                                    padding=10,
+                                    border_radius=8,
+                                    bgcolor=COLOR_CAJA_INFO,
+                                ),
+                                ft.Container(
+                                    content=ft.Text(
+                                        feedback,
+                                        size=12,
+                                        color=ft.Colors.WHITE,
+                                        weight=ft.FontWeight.W_600,
+                                    ),
+                                    padding=10,
+                                    border_radius=8,
+                                    bgcolor=badge_color,
+                                ),
+                            ],
+                            spacing=6,
+                        ),
+                        padding=ft.Padding(left=8, right=0, top=0, bottom=0),
+                        width=ancho_campo(),
+                    )
+                    item_controles.append(detalle)
+
+                items.append(
+                    ft.Column(item_controles, spacing=4, width=ancho_campo())
+                )
+
+            def jugar_otro(e):
+                page.run_task(_iniciar_modo_escritura)
+
+            def volver_al_menu(e):
+                ir_a(lambda: mostrar_reappraisal_juegos_niveles("familia"))
+
+            pantalla(
+                ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=44, color=COLOR_EXITO),
+                ft.Text(
+                    "Bloque completado",
+                    size=22,
+                    weight=ft.FontWeight.BOLD,
+                    text_align=ft.TextAlign.CENTER,
+                    font_family=MENTO_FUENTE,
+                ),
+                ft.Text(
+                    "Tocá cada situación para ver el contexto completo.",
+                    color=COLOR_TEXTO_MEDIO,
+                    text_align=ft.TextAlign.CENTER,
+                    size=13,
+                ),
+                *items,
+                ft.ElevatedButton(
+                    "Jugar otro bloque",
+                    icon=ft.Icons.REFRESH,
+                    on_click=jugar_otro,
+                    width=ancho_campo(),
+                    height=48,
+                    bgcolor=MENTO_CELESTE,
+                    color=ft.Colors.WHITE,
+                ),
+                ft.OutlinedButton(
+                    "Volver al menú",
+                    on_click=volver_al_menu,
+                    width=ancho_campo(),
+                    height=48,
+                ),
+                mostrar_volver=False,
+            )
+
+        renderizar()
+
+    # ==========================================================
+    # MODO JUEGOS DE NIVELES — Pantalla de categoría
+    # ==========================================================
+
+    def mostrar_reappraisal_juegos_niveles(categoria_clave):
+
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
         niveles = MENTO_NIVELES[categoria_clave]
 
@@ -2692,6 +3702,45 @@ def main(page: ft.Page):
                     bgcolor=MENTO_ROSA_TEXTO,
                     width=ancho_campo(),
                     on_click=abrir_nivel_ia,
+                )
+            )
+
+            # Tarjeta: Modo Escritura (texto libre)
+            filas.append(
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(
+                                ft.Icons.EDIT_NOTE,
+                                color=ft.Colors.WHITE,
+                                size=26,
+                            ),
+                            ft.Column(
+                                [
+                                    ft.Text(
+                                        "Modo Escritura",
+                                        color=ft.Colors.WHITE,
+                                        weight=ft.FontWeight.BOLD,
+                                        font_family=MENTO_FUENTE,
+                                        size=15,
+                                    ),
+                                    ft.Text(
+                                        "Escribí tus propios reappraisals",
+                                        color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE),
+                                        size=11,
+                                    ),
+                                ],
+                                spacing=1,
+                            ),
+                        ],
+                        spacing=12,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                    padding=16,
+                    border_radius=14,
+                    bgcolor=MENTO_CELESTE,
+                    width=ancho_campo(),
+                    on_click=abrir_modo_escritura,
                 )
             )
 
