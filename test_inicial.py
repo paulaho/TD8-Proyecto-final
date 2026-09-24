@@ -157,21 +157,104 @@ def mostrar_test_inicial(page: ft.Page, estado: dict, SUPABASE_USUARIOS_URL: str
         rg_opciones = ft.RadioGroup(
             content=ft.Column(
                 [
-                    ft.Container(
-                        content=ft.Radio(
-                            value=str(op["nivel"]),
-                            label=f"Opción {chr(64 + op['nivel'])} (Nivel {op['nivel']}): \"{op['label']}\"",
-                        ),
-                        padding=4,
+                    ft.Row(
+                        [
+                            ft.Radio(
+                                value=str(op["nivel"]),
+                            ),
+                            ft.Text(
+                                f"Opción {chr(64 + op['nivel'])}: {op['label']}",
+                                size=14,
+                                color=COLOR_TEXTO_MEDIO,
+                                expand=True,
+                            ),
+                        ],
+                        spacing=4,
+                        vertical_alignment=ft.CrossAxisAlignment.START,
                     )
                     for op in OPCIONES_REGULACION
                 ],
                 spacing=12,
             ),
-            value=str(respuestas["nivel_regulacion"]) if respuestas["nivel_regulacion"] else None,
+            value=(
+                str(respuestas["nivel_regulacion"])
+                if respuestas["nivel_regulacion"]
+                else None
+            ),
         )
-        txt_error = ft.Text("", color=ft.Colors.RED, size=13, text_align=ft.TextAlign.CENTER)
+        txt_error = ft.Text(
+            "",
+            color=ft.Colors.RED,
+            size=13,
+            text_align=ft.TextAlign.CENTER,
+        )
 
+        def validar_y_mostrar_explicacion(e):
+            if not rg_opciones.value:
+                txt_error.value = "Por favor elegí la opción que mejor describa tu situación."
+                page.update()
+                return
+
+            nivel_elegido = int(rg_opciones.value)
+            op_data = next(
+                op for op in OPCIONES_REGULACION
+                if op["nivel"] == nivel_elegido
+            )
+
+            respuestas["nivel_regulacion"] = nivel_elegido
+            respuestas["familiaridad_regulacion_texto"] = op_data["label"]
+
+            mostrar_paso_explicacion(op_data)
+
+        controles = [
+            ft.Icon(
+                ft.Icons.PSYCHOLOGY_OUTLINED,
+                size=48,
+                color=COLOR_PRIMARIO,
+            ),
+
+            ft.Text(
+                "Punto de partida",
+                size=20,
+                weight=ft.FontWeight.BOLD,
+                text_align=ft.TextAlign.CENTER,
+            ),
+
+            ft.Text(
+                "¿Qué tan familiarizado/a estás con el término "
+                "'Regulación Emocional'?",
+                size=16,
+                weight=ft.FontWeight.W_600,
+                text_align=ft.TextAlign.CENTER,
+                width=ancho_campo(),
+            ),
+
+            ft.Container(
+                content=rg_opciones,
+                width=ancho_campo(),
+            ),
+
+            txt_error,
+
+            ft.Row(
+                [
+                    ft.TextButton(
+                        "Volver",
+                        on_click=lambda _: mostrar_paso_familia(),
+                    ),
+                    ft.ElevatedButton(
+                        "Continuar",
+                        on_click=validar_y_mostrar_explicacion,
+                        width=160,
+                        height=48,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=15,
+            ),
+        ]
+
+        render_contenedor(controles)
         def validar_y_mostrar_explicacion(e):
             if not rg_opciones.value:
                 txt_error.value = "Por favor elegí la opción que mejor describa tu situación."

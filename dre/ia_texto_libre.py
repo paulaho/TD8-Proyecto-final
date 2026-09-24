@@ -102,7 +102,7 @@ def generar_batch_texto_libre(estado):
 
     client = _obtener_gemini_client()
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
             "response_mime_type": "application/json",
@@ -184,7 +184,7 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado):
 
     client = _obtener_gemini_client()
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
             "response_mime_type": "application/json",
@@ -270,7 +270,7 @@ def evaluar_batch_texto_libre(ejercicios):
 
     client = _obtener_gemini_client()
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
             "response_mime_type": "application/json",

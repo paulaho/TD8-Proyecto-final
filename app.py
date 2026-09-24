@@ -659,8 +659,6 @@ def main(page: ft.Page):
             )
 
         else:
-            page.run_task(precargar_batch_ia)
-            page.run_task(precargar_batches_texto_libre)
             ir_a(mostrar_menu_principal)
 
     def finalizar_test_inicial():
@@ -689,6 +687,11 @@ def main(page: ft.Page):
         estado["modo_local"] = local
         estado["realizo_test_inicial"] = bool(usuario.get("realizo_test_inicial")) # TEMP TEST
         estado["perfil_contexto"] = usuario.get("perfil_contexto") or {} # TEMP TEST
+
+        # Precargar IA apenas entra el usuario, si ya completó el test inicial
+        if estado["realizo_test_inicial"]:
+            page.run_task(precargar_batch_ia)
+            page.run_task(precargar_batches_texto_libre)
 
         historial.clear()
 
@@ -2595,19 +2598,24 @@ def main(page: ft.Page):
 
     async def precargar_batches_texto_libre():
         """
-        Genera 3 batches de 5 situaciones c/u en segundo plano al arrancar.
-        Se dispara al completar el test inicial o al entrar si ya lo completó.
+        Genera hasta 3 batches en segundo plano.
+        Cada batch queda disponible apenas termina de generarse.
         """
         if estado.get("_tl_batches_queue") and len(estado["_tl_batches_queue"]) >= 3:
             return
+
         if estado.get("_tl_batch_generando"):
             return
 
         estado["_tl_batch_generando"] = True
+
         try:
-            print("Precargando 3 batches de texto libre en background...")
-            nuevos = []
-            for i in range(3):
+            print("Precargando batches de texto libre en background...")
+
+            faltantes = 3 - len(estado.get("_tl_batches_queue", []))
+
+            for i in range(faltantes):
+
                 if estado.get("_tl_historial") and i > 0:
                     batch = await asyncio.to_thread(
                         generar_batch_texto_libre_adaptativo,
@@ -2619,15 +2627,24 @@ def main(page: ft.Page):
                         generar_batch_texto_libre,
                         estado,
                     )
-                nuevos.append(batch)
-                print(f"  Batch texto libre {i + 1}/3 generado")
-            estado["_tl_batches_queue"].extend(nuevos)
-            print(f"Precarga completa: {len(estado['_tl_batches_queue'])} batches disponibles")
+
+                # IMPORTANTE:
+                # agregarlo inmediatamente a la cola
+                estado["_tl_batches_queue"].append(batch)
+
+                print(
+                    f"Batch texto libre disponible. "
+                    f"Total en cola: {len(estado['_tl_batches_queue'])}"
+                )
+
+            print("Precarga de texto libre completa.")
+
         except Exception as e:
             print("Error precargando batches texto libre:", repr(e))
+
         finally:
             estado["_tl_batch_generando"] = False
-
+            
     async def recargar_batches_texto_libre():
         """
         Genera 3 nuevos batches adaptativos en segundo plano cuando se
@@ -2661,162 +2678,248 @@ def main(page: ft.Page):
 
     def mostrar_tutorial_texto_libre():
         """
-        Explica la mecánica del modo texto libre con un ejemplo estático
-        concreto. Se muestra solo una vez por sesión.
+        Tutorial progresivo del Modo Escritura.
+        Muestra cada parte del ejemplo paso a paso.
         """
-        def continuar(e):
-            estado["_tl_vio_tutorial"] = True
-            ir_a(_iniciar_modo_escritura)
 
-        pantalla(
-            ft.Icon(ft.Icons.EDIT_NOTE, size=56, color=MENTO_CELESTE),
-            ft.Text(
-                "Modo Escritura",
-                size=24,
-                weight=ft.FontWeight.BOLD,
-                text_align=ft.TextAlign.CENTER,
-                font_family=MENTO_FUENTE,
-            ),
-            ft.Text(
-                "En este modo vas a leer una situación y su reappraisal, "
-                "escribir tu propio contraargumento, y luego construir un "
-                "nuevo reappraisal que integre tu objeción. La IA te da "
-                "feedback al final.",
-                size=14,
-                color=COLOR_TEXTO_MEDIO,
-                text_align=ft.TextAlign.CENTER,
-            ),
-            ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text(
-                            "Ejemplo",
-                            weight=ft.FontWeight.BOLD,
-                            size=13,
-                            color=MENTO_CELESTE,
-                            font_family=MENTO_FUENTE,
-                        ),
-                        ft.Container(
-                            content=ft.Column(
-                                [
-                                    ft.Text(
-                                        "📍 Situación",
-                                        weight=ft.FontWeight.W_600,
-                                        size=12,
-                                        color=COLOR_TEXTO_FUERTE,
-                                    ),
-                                    ft.Text(
-                                        "En una cena familiar, le contás a tu hermano un proyecto que te "
-                                        "entusiasma mucho y te responde diciendo que deberías buscarte un "
-                                        "trabajo más seguro.",
-                                        size=13,
-                                        color=COLOR_TEXTO_FUERTE,
-                                    ),
-                                ],
-                                spacing=4,
+        sub_paso = {"valor": 0}
+
+        def continuar_al_juego(e):
+            estado["_tl_vio_tutorial"] = True
+            page.run_task(_iniciar_modo_escritura)
+
+        def avanzar(nuevo_paso):
+            sub_paso["valor"] = nuevo_paso
+            renderizar()
+
+        def renderizar():
+            controles = [
+                ft.Icon(
+                    ft.Icons.EDIT_NOTE,
+                    size=56,
+                    color=MENTO_CELESTE,
+                ),
+                ft.Text(
+                    "Modo Escritura",
+                    size=24,
+                    weight=ft.FontWeight.BOLD,
+                    text_align=ft.TextAlign.CENTER,
+                    font_family=MENTO_FUENTE,
+                ),
+                ft.Text(
+                    "Vamos a ver un ejemplo paso a paso.",
+                    size=14,
+                    color=COLOR_TEXTO_MEDIO,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                ft.Text(
+                    "Ejemplo",
+                    weight=ft.FontWeight.BOLD,
+                    size=13,
+                    color=MENTO_CELESTE,
+                    font_family=MENTO_FUENTE,
+                ),
+
+                # SITUACIÓN
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Text(
+                                "📍 Situación",
+                                weight=ft.FontWeight.W_600,
+                                size=12,
+                                color=COLOR_TEXTO_FUERTE,
                             ),
-                            padding=10,
-                            border_radius=8,
-                            bgcolor=MENTO_AMARILLO_CLARO,
-                        ),
-                        ft.Container(
-                            content=ft.Column(
-                                [
-                                    ft.Text(
-                                        "💭 Reappraisal inicial",
-                                        weight=ft.FontWeight.W_600,
-                                        size=12,
-                                        color=COLOR_TEXTO_FUERTE,
-                                    ),
-                                    ft.Text(
-                                        "A lo mejor me lo dice desde su propia inseguridad y preocupación "
-                                        "por mi bienestar, no porque quiera tirarme abajo.",
-                                        size=13,
-                                        color=COLOR_TEXTO_FUERTE,
-                                    ),
-                                ],
-                                spacing=4,
-                            ),
-                            padding=10,
-                            border_radius=8,
-                            bgcolor=MENTO_CELESTE_CAJA,
-                        ),
-                        ft.Container(
-                            content=ft.Column(
-                                [
-                                    ft.Text(
-                                        "✍️ Tu contraargumento",
-                                        weight=ft.FontWeight.W_600,
-                                        size=12,
-                                        color=COLOR_TEXTO_FUERTE,
-                                    ),
-                                    ft.Text(
-                                        "Pero si confiara en mí, me apoyaría en lugar de dudar de lo que "
-                                        "puedo hacer.",
-                                        size=13,
-                                        color=COLOR_TEXTO_FUERTE,
-                                    ),
-                                ],
-                                spacing=4,
-                            ),
-                            padding=10,
-                            border_radius=8,
-                            bgcolor=COLOR_CAJA_SUAVE,
-                        ),
-                        ft.Container(
-                            content=ft.Column(
-                                [
-                                    ft.Text(
-                                        "🔄 Nuevo Reappraisal",
-                                        weight=ft.FontWeight.W_600,
-                                        size=12,
-                                        color=COLOR_TEXTO_FUERTE,
-                                    ),
-                                    ft.Text(
-                                        "Es comprensible que quiera apoyarme, pero su forma de expresar "
-                                        "cuidado es previniendo riesgos; que tenga dudas no significa que "
-                                        "yo no sea capaz de lograrlo.",
-                                        size=13,
-                                        color=COLOR_TEXTO_FUERTE,
-                                    ),
-                                ],
-                                spacing=4,
-                            ),
-                            padding=10,
-                            border_radius=8,
-                            bgcolor=COLOR_CAJA_INFO,
-                        ),
-                        ft.Container(
-                            content=ft.Text(
-                                "✅ ¡Excelente reencuadre! Pudiste separar el afecto y la intención de tu "
-                                "hermano de tus propias capacidades sin caer en positivismo mágico.",
+                            ft.Text(
+                                "En una cena familiar, le contás a tu hermano un "
+                                "proyecto que te entusiasma mucho y te responde "
+                                "diciendo que deberías buscarte un trabajo más seguro.",
                                 size=13,
                                 color=COLOR_TEXTO_FUERTE,
-                                italic=True,
                             ),
-                            padding=10,
-                            border_radius=8,
-                            bgcolor=COLOR_EXITO_CAJA,
-                        ),
-                    ],
-                    spacing=8,
+                        ],
+                        spacing=4,
+                    ),
+                    padding=10,
+                    border_radius=8,
+                    bgcolor=MENTO_AMARILLO_CLARO,
+                    width=ancho_campo(),
                 ),
-                padding=14,
-                border_radius=14,
-                bgcolor=ft.Colors.with_opacity(0.5, COLOR_CAJA_SUAVE),
-                width=ancho_campo(360),
-            ),
-            ft.ElevatedButton(
-                "¡Entendido, jugar!",
-                icon=ft.Icons.PLAY_ARROW,
-                on_click=continuar,
-                width=ancho_campo(),
-                height=50,
-                bgcolor=MENTO_CELESTE,
-                color=ft.Colors.WHITE,
-            ),
-        )
+            ]
 
+            # PASO 0
+            if sub_paso["valor"] == 0:
+                controles.append(
+                    ft.ElevatedButton(
+                        "Ver reappraisal →",
+                        on_click=lambda _: avanzar(1),
+                        width=ancho_campo(),
+                        height=48,
+                        bgcolor=MENTO_CELESTE,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            # REAPPRAISAL INICIAL
+            if sub_paso["valor"] >= 1:
+                controles.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Text(
+                                    "💭 Reappraisal inicial",
+                                    weight=ft.FontWeight.W_600,
+                                    size=12,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                                ft.Text(
+                                    "A lo mejor me lo dice desde su propia inseguridad "
+                                    "y preocupación por mi bienestar, no porque quiera "
+                                    "tirarme abajo.",
+                                    size=13,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                            ],
+                            spacing=4,
+                        ),
+                        padding=10,
+                        border_radius=8,
+                        bgcolor=MENTO_CELESTE_CAJA,
+                        width=ancho_campo(),
+                    )
+                )
+
+            # PASO 1
+            if sub_paso["valor"] == 1:
+                controles.append(
+                    ft.ElevatedButton(
+                        "Ver contraargumento →",
+                        on_click=lambda _: avanzar(2),
+                        width=ancho_campo(),
+                        height=48,
+                        bgcolor=MENTO_NARANJA,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            # CONTRAARGUMENTO
+            if sub_paso["valor"] >= 2:
+                controles.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Text(
+                                    "✍️ Contraargumento",
+                                    weight=ft.FontWeight.W_600,
+                                    size=12,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                                ft.Text(
+                                    "Pero si confiara en mí, me apoyaría en lugar "
+                                    "de dudar de lo que puedo hacer.",
+                                    size=13,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                            ],
+                            spacing=4,
+                        ),
+                        padding=10,
+                        border_radius=8,
+                        bgcolor=COLOR_CAJA_SUAVE,
+                        width=ancho_campo(),
+                    )
+                )
+
+            # PASO 2
+            if sub_paso["valor"] == 2:
+                controles.append(
+                    ft.ElevatedButton(
+                        "Ver nuevo reappraisal →",
+                        on_click=lambda _: avanzar(3),
+                        width=ancho_campo(),
+                        height=48,
+                        bgcolor=MENTO_CELESTE,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            # NUEVO REAPPRAISAL
+            if sub_paso["valor"] >= 3:
+                controles.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Text(
+                                    "🔄 Nuevo Reappraisal",
+                                    weight=ft.FontWeight.W_600,
+                                    size=12,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                                ft.Text(
+                                    "Es comprensible que quiera apoyarme, pero su "
+                                    "forma de expresar cuidado es previniendo riesgos. "
+                                    "Que tenga dudas no significa que yo no sea capaz "
+                                    "de lograrlo.",
+                                    size=13,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                            ],
+                            spacing=4,
+                        ),
+                        padding=10,
+                        border_radius=8,
+                        bgcolor=COLOR_CAJA_INFO,
+                        width=ancho_campo(),
+                    )
+                )
+
+            # PASO 3
+            if sub_paso["valor"] == 3:
+                controles.append(
+                    ft.ElevatedButton(
+                        "Ver feedback →",
+                        on_click=lambda _: avanzar(4),
+                        width=ancho_campo(),
+                        height=48,
+                        bgcolor=MENTO_CELESTE,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            # FEEDBACK FINAL
+            if sub_paso["valor"] >= 4:
+                controles.append(
+                    ft.Container(
+                        content=ft.Text(
+                            "✅ ¡Excelente reencuadre! Pudiste separar el afecto "
+                            "y la intención de tu hermano de tus propias capacidades "
+                            "sin caer en positivismo mágico.",
+                            size=13,
+                            color=COLOR_TEXTO_FUERTE,
+                            italic=True,
+                        ),
+                        padding=10,
+                        border_radius=8,
+                        bgcolor=COLOR_EXITO_CAJA,
+                        width=ancho_campo(),
+                    )
+                )
+
+                controles.append(
+                    ft.ElevatedButton(
+                        "¡Entendido, jugar!",
+                        icon=ft.Icons.PLAY_ARROW,
+                        on_click=continuar_al_juego,
+                        width=ancho_campo(),
+                        height=50,
+                        bgcolor=MENTO_CELESTE,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            pantalla(*controles)
+
+        renderizar()
     # ==========================================================
     # MODO TEXTO LIBRE — Entrada al juego
     # ==========================================================
@@ -3008,6 +3111,7 @@ def main(page: ft.Page):
                     width=ancho_campo(),
                     on_change=lambda e: texto_contraarg.update({"valor": e.control.value}),
                 )
+
                 controles.append(
                     ft.Container(
                         content=ft.Column(
@@ -3033,8 +3137,7 @@ def main(page: ft.Page):
                         bgcolor=COLOR_CAJA_SUAVE,
                         width=ancho_campo(),
                     )
-                )
-
+                )                
                 es_ultimo = indice == 4
                 txt_boton = "Pasar a la Fase 2 →" if es_ultimo else f"Siguiente situación ({indice + 2}/5) →"
 
