@@ -71,6 +71,14 @@ from dre.mento import (
 from dre.ia_niveles import (
     generar_batch_familia_ia,
     generar_batch_familia_ia_adaptativo,
+    generar_batch_vinculos_ia,
+    generar_batch_vinculos_ia_adaptativo,
+    generar_batch_salud_ia,
+    generar_batch_salud_ia_adaptativo,
+    generar_batch_trabajo_estudio_ia,
+    generar_batch_trabajo_estudio_ia_adaptativo,
+    generar_batch_ia,
+    generar_batch_ia_adaptativo,
 )
 
 from dre.ia_texto_libre import (
@@ -2093,8 +2101,9 @@ def main(page: ft.Page):
 
         tarjetas = []
         for cat in MENTO_CATEGORIAS:
-            def elegir(e, clave=cat["clave"]):
-                ir_a(lambda: mostrar_reappraisal_juegos_niveles(clave))
+            cat_clave = cat["clave"]
+            def elegir_handler(e, c=cat_clave):
+                ir_a(lambda: mostrar_reappraisal_juegos_niveles(c))
 
             tarjetas.append(
                 ft.Container(
@@ -2110,7 +2119,7 @@ def main(page: ft.Page):
                     border_radius=16,
                     bgcolor=cat["color"],
                     width=ancho_campo(),
-                    on_click=elegir,
+                    on_click=elegir_handler,
                 )
             )
         pantalla(
@@ -2130,23 +2139,29 @@ def main(page: ft.Page):
         if estado.get("_niveles_ia_batch"):
             return
 
+    async def precargar_batch_ia(categoria="familia"):
+
+        if estado.get("_niveles_ia_batch") and estado.get("_categoria_ia_actual") == categoria:
+            return
+
         if estado.get("_batch_ia_generando"):
             return
 
         estado["_batch_ia_generando"] = True
 
         try:
-            print("Precargando batch IA...")
+            print(f"Precargando batch IA ({categoria})...")
 
             niveles = await asyncio.to_thread(
-                generar_batch_familia_ia, estado
+                generar_batch_ia, categoria, estado
             )
 
             estado["_niveles_ia_batch"] = niveles
             estado["_nivel_ia_actual"] = 0
+            estado["_categoria_ia_actual"] = categoria
 
             print(
-                f"Batch IA precargado: {len(niveles)} niveles"
+                f"Batch IA precargado ({categoria}): {len(niveles)} niveles"
             )
 
         except Exception as e:
@@ -2159,7 +2174,7 @@ def main(page: ft.Page):
             estado["_batch_ia_generando"] = False
 
 
-    async def precargar_siguiente_batch_ia(historial_reciente):
+    async def precargar_siguiente_batch_ia(historial_reciente, categoria="familia"):
 
         if estado.get("_siguiente_batch_ia"):
             return
@@ -2170,10 +2185,11 @@ def main(page: ft.Page):
         estado["_siguiente_batch_ia_generando"] = True
 
         try:
-            print("Generando próximos 10 niveles en segundo plano...")
+            print(f"Generando próximos 10 niveles en segundo plano ({categoria})...")
 
             niveles = await asyncio.to_thread(
-                generar_batch_familia_ia_adaptativo,
+                generar_batch_ia_adaptativo,
+                categoria,
                 historial_reciente,
                 estado,
             )
@@ -2181,7 +2197,7 @@ def main(page: ft.Page):
             estado["_siguiente_batch_ia"] = niveles
 
             print(
-                f"Próximo batch IA listo: {len(niveles)} niveles"
+                f"Próximo batch IA listo ({categoria}): {len(niveles)} niveles"
             )
 
         except Exception as e:
@@ -2193,7 +2209,7 @@ def main(page: ft.Page):
         finally:
             estado["_siguiente_batch_ia_generando"] = False
 
-    async def mostrar_reappraisal_generando_ia():
+    async def mostrar_reappraisal_generando_ia(categoria_clave="familia"):
 
         pantalla(
             ft.ProgressRing(),
@@ -2207,31 +2223,34 @@ def main(page: ft.Page):
 
             if estado.get("_historial_ia"):
 
-                print("Generando batch adaptativo")
+                print(f"Generando batch adaptativo para {categoria_clave}")
 
                 niveles = await asyncio.to_thread(
-                    generar_batch_familia_ia_adaptativo,
+                    generar_batch_ia_adaptativo,
+                    categoria_clave,
                     estado["_historial_ia"],
                     estado,
                 )
 
             else:
 
-                print("Generando primer batch")
+                print(f"Generando primer batch para {categoria_clave}")
 
                 niveles = await asyncio.to_thread(
-                    generar_batch_familia_ia,
+                    generar_batch_ia,
+                    categoria_clave,
                     estado,
                 )
             estado["_niveles_ia_batch"] = niveles
             estado["_nivel_ia_actual"] = 0
+            estado["_categoria_ia_actual"] = categoria_clave
 
             print(
-                f"Batch generado: {len(niveles)} niveles"
+                f"Batch generado ({categoria_clave}): {len(niveles)} niveles"
             )
 
             mostrar_reappraisal_juego_ia(
-                "familia",
+                categoria_clave,
                 0,
             )
 
@@ -2438,6 +2457,7 @@ def main(page: ft.Page):
                                 page.run_task(
                                     precargar_siguiente_batch_ia,
                                     historial_7,
+                                    categoria_clave,
                                 )
 
                             mostrar_reappraisal_juego_ia(
@@ -2473,64 +2493,66 @@ def main(page: ft.Page):
                             )
                         )
 
-                        async def continuar_siguiente_batch(e):
+                        def click_continuar_batch(e):
+                            async def _continuar():
+                                guardar_resultado_ia(dato)
 
-                            guardar_resultado_ia(dato)
+                                # Si los próximos 10 ya están listos
+                                if estado.get("_siguiente_batch_ia"):
 
-                            # Si los próximos 10 ya están listos
-                            if estado.get("_siguiente_batch_ia"):
+                                    estado["_niveles_ia_batch"] = estado["_siguiente_batch_ia"]
+                                    estado["_siguiente_batch_ia"] = []
+                                    estado["_nivel_ia_actual"] = 0
 
-                                estado["_niveles_ia_batch"] = estado["_siguiente_batch_ia"]
-                                estado["_siguiente_batch_ia"] = []
-                                estado["_nivel_ia_actual"] = 0
+                                    mostrar_reappraisal_juego_ia(
+                                        categoria_clave,
+                                        0,
+                                    )
+                                    return
 
-                                mostrar_reappraisal_juego_ia(
-                                    categoria_clave,
-                                    0,
-                                )
-                                return
-
-                            # Si todavía se están generando, esperamos
-                            pantalla(
-                                ft.ProgressRing(),
-                                ft.Text(
-                                    "Preparando los próximos niveles...",
-                                    text_align=ft.TextAlign.CENTER,
-                                ),
-                            )
-
-                            while estado.get("_siguiente_batch_ia_generando"):
-                                await asyncio.sleep(0.2)
-
-                            if estado.get("_siguiente_batch_ia"):
-
-                                estado["_niveles_ia_batch"] = estado["_siguiente_batch_ia"]
-                                estado["_siguiente_batch_ia"] = []
-                                estado["_nivel_ia_actual"] = 0
-
-                                mostrar_reappraisal_juego_ia(
-                                    categoria_clave,
-                                    0,
-                                )
-
-                            else:
+                                # Si todavía se están generando, esperamos
                                 pantalla(
-                                    ft.Icon(
-                                        ft.Icons.ERROR_OUTLINE,
-                                        size=50,
-                                        color=ft.Colors.RED,
-                                    ),
+                                    ft.ProgressRing(),
                                     ft.Text(
-                                        "No pudimos preparar los próximos niveles.",
+                                        "Preparando los próximos niveles...",
                                         text_align=ft.TextAlign.CENTER,
                                     ),
                                 )
 
+                                while estado.get("_siguiente_batch_ia_generando"):
+                                    await asyncio.sleep(0.2)
+
+                                if estado.get("_siguiente_batch_ia"):
+
+                                    estado["_niveles_ia_batch"] = estado["_siguiente_batch_ia"]
+                                    estado["_siguiente_batch_ia"] = []
+                                    estado["_nivel_ia_actual"] = 0
+
+                                    mostrar_reappraisal_juego_ia(
+                                        categoria_clave,
+                                        0,
+                                    )
+
+                                else:
+                                    pantalla(
+                                        ft.Icon(
+                                            ft.Icons.ERROR_OUTLINE,
+                                            size=50,
+                                            color=ft.Colors.RED,
+                                        ),
+                                        ft.Text(
+                                            "No pudimos preparar los próximos niveles.",
+                                            text_align=ft.TextAlign.CENTER,
+                                        ),
+                                    )
+
+                            page.run_task(_continuar)
+
                         controles.append(
                             ft.ElevatedButton(
-                                content="Continuar con otros 10 niveles",
+                                "Continuar con otros 10 niveles",
                                 icon=ft.Icons.ARROW_FORWARD,
-                                on_click=continuar_siguiente_batch,
+                                on_click=click_continuar_batch,
                                 width=ancho_campo(),
                                 bgcolor=MENTO_VERDE_OSCURO,
                                 color=ft.Colors.WHITE,
@@ -3746,15 +3768,14 @@ def main(page: ft.Page):
                 )
             )
 
-        if categoria_clave == "familia":
+        cat_clave = categoria_clave
 
-
-            async def abrir_nivel_ia(e):
-
-                # Si ya están listos, abrir
-                if estado.get("_niveles_ia_batch"):
+        def click_nivel_ia(e):
+            async def _abrir():
+                # Si ya están listos para esta categoría, abrir
+                if estado.get("_niveles_ia_batch") and estado.get("_categoria_ia_actual") == cat_clave:
                     mostrar_reappraisal_juego_ia(
-                        "familia",
+                        cat_clave,
                         0,
                     )
                     return
@@ -3772,39 +3793,43 @@ def main(page: ft.Page):
                     await asyncio.sleep(0.2)
 
                 # Cuando terminó la precarga
-                if estado.get("_niveles_ia_batch"):
+                if estado.get("_niveles_ia_batch") and estado.get("_categoria_ia_actual") == cat_clave:
                     mostrar_reappraisal_juego_ia(
-                        "familia",
+                        cat_clave,
                         0,
                     )
                 else:
-                    await mostrar_reappraisal_generando_ia()
+                    await mostrar_reappraisal_generando_ia(cat_clave)
 
-            filas.append(
-                ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Icon(
-                                ft.Icons.AUTO_AWESOME,
-                                color=ft.Colors.WHITE,
-                                size=26,
-                            ),
-                            ft.Text(
-                                "Nivel IA",
-                                color=ft.Colors.WHITE,
-                                weight=ft.FontWeight.BOLD,
-                                font_family=MENTO_FUENTE,
-                            ),
-                        ],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                    ),
-                    padding=16,
-                    border_radius=14,
-                    bgcolor=MENTO_ROSA_TEXTO,
-                    width=ancho_campo(),
-                    on_click=abrir_nivel_ia,
-                )
+            page.run_task(_abrir)
+
+        filas.append(
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(
+                            ft.Icons.AUTO_AWESOME,
+                            color=ft.Colors.WHITE,
+                            size=26,
+                        ),
+                        ft.Text(
+                            "Nivel IA",
+                            color=ft.Colors.WHITE,
+                            weight=ft.FontWeight.BOLD,
+                            font_family=MENTO_FUENTE,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                padding=16,
+                border_radius=14,
+                bgcolor=MENTO_ROSA_TEXTO,
+                width=ancho_campo(),
+                on_click=click_nivel_ia,
             )
+        )
+
+        if categoria_clave == "familia":
 
             # Tarjeta: Modo Escritura (texto libre)
             filas.append(
