@@ -82,31 +82,48 @@ def guardar_sesion_texto_libre_supabase(
     fase1_respuestas,
     fase2_respuestas,
     correcciones,
+    emociones=None,
     categoria="familia",
 ):
     """
-    Persiste en Supabase una sesión completa del modo texto libre:
-    las 5 situaciones generadas por la IA, los 5 contraargumentos
-    (Fase 1), los 5 nuevos reappraisals (Fase 2) y las 5 correcciones
-    de la IA.
+    Persiste en Supabase una sesión completa del modo texto libre / contraargumento:
+    las 5 situaciones generadas por la IA, los 5 contraargumentos,
+    las 5 emociones registradas, los 5 nuevos reappraisals y las 5 correcciones.
     """
     try:
+        body = {
+            "usuario_id": usuario_id,
+            "categoria": categoria,
+            "situaciones": situaciones,
+            "fase1_respuestas": fase1_respuestas,
+            "fase2_respuestas": fase2_respuestas,
+            "correcciones": correcciones,
+        }
+        if emociones is not None:
+            body["emociones"] = emociones
+
         resp = requests.post(
             SUPABASE_TEXTO_LIBRE_URL,
             headers={
                 **HEADERS,
                 "Prefer": "return=minimal",
             },
-            json={
-                "usuario_id": usuario_id,
-                "categoria": categoria,
-                "situaciones": situaciones,
-                "fase1_respuestas": fase1_respuestas,
-                "fase2_respuestas": fase2_respuestas,
-                "correcciones": correcciones,
-            },
+            json=body,
             timeout=10,
         )
+
+        if not resp.ok and "emociones" in body:
+            # Reintento sin emociones en caso de que la columna aún no exista en Supabase
+            body.pop("emociones", None)
+            resp = requests.post(
+                SUPABASE_TEXTO_LIBRE_URL,
+                headers={
+                    **HEADERS,
+                    "Prefer": "return=minimal",
+                },
+                json=body,
+                timeout=10,
+            )
 
         if not resp.ok:
             print(

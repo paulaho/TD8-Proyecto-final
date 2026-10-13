@@ -212,20 +212,21 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado):
 
 def evaluar_batch_texto_libre(ejercicios):
     """
-    Evalúa las 5 parejas (contraargumento + nuevo reappraisal) del usuario
-    en una sola llamada a Gemini y devuelve feedback ultracorto (≤15 palabras)
-    por cada ejercicio.
+    Evalúa las 5 tuplas completas del usuario:
+    (situacion, reappraisal_inicial, contraargumento, emocion, nuevo_reappraisal)
+    en una sola llamada a Gemini y devuelve feedback por cada ejercicio.
 
     Args:
         ejercicios: lista de 5 dicts con claves:
             - situacion: str
             - reappraisal_inicial: str
-            - contraargumento: str (escrito por el usuario en Fase 1)
-            - nuevo_reappraisal: str (escrito por el usuario en Fase 2)
+            - contraargumento: str
+            - emocion: str
+            - nuevo_reappraisal: str (Reappraisal 2)
 
     Returns:
         lista de 5 dicts con clave:
-            - feedback: str (≤15 palabras)
+            - feedback: str (≤35 palabras)
     """
     if len(ejercicios) != 5:
         raise ValueError(
@@ -235,37 +236,35 @@ def evaluar_batch_texto_libre(ejercicios):
     ejercicios_json = json.dumps(ejercicios, ensure_ascii=False, indent=2)
 
     prompt = f"""
-    Evaluá las siguientes 5 respuestas de reappraisal cognitivo de un usuario
-    y devolvé un comentario de corrección ultracorto (MÁXIMO 15 palabras) por cada una.
+    Evaluá las siguientes 5 respuestas completas de regulación emocional mediante
+    cognitive reappraisal (modo Contraargumento) de un usuario.
+    Devolvé un comentario de corrección conciso (MÁXIMO 35 palabras) por cada una.
 
-    CONTEXTO DE LA TAREA:
-    El usuario recibió una situación familiar estresante junto con un reappraisal
-    inicial (interpretación alternativa). Primero debía escribir un contraargumento
-    a ese reappraisal (una objeción plausible). Luego debía escribir un nuevo
-    reappraisal que integrara tanto el reappraisal inicial como su propia objeción.
+    CONTEXTO DE LA TAREA POR CADA SITUACIÓN:
+    1. "situacion": Descripción de una situación familiar estresante.
+    2. "reappraisal_inicial": Reappraisal 1 dado por la app (interpretación alternativa inicial).
+    3. "contraargumento": Objeción redactada por el usuario cuestionando el reappraisal inicial.
+    4. "emocion": Emoción(es) que le provoca ese contraargumento al usuario.
+    5. "nuevo_reappraisal": Nuevo reappraisal (Reappraisal 2) redactado por el usuario intentando responder a su propio contraargumento y reestructurar la situación.
 
-    CRITERIOS DE EVALUACIÓN para cada ejercicio:
-    1. El contraargumento debe ser una objeción válida y plausible al reappraisal inicial
-       (no una negación total, no un insulto, sino una duda o matiz razonable).
-    2. El nuevo reappraisal debe:
-       - Reestructurar cognitivamente la situación de forma realista.
-       - Integrar o desarmar la objeción del propio usuario.
-       - No caer en positivismo tóxico ("todo pasa por algo", "en el fondo me quiere").
-       - No minimizar las emociones ni los hechos.
-       - No ser agresivo hacia los demás ni hacia uno mismo.
-
-    FORMATO DEL FEEDBACK:
-    - Máximo 15 palabras por respuesta.
-    - Si el ejercicio está bien hecho: empezá con "✅" y destacá lo que funcionó.
-    - Si hay algo que mejorar: empezá con "💡" y señalá específicamente qué mejorar.
-    - Si hay un error importante: empezá con "⚠️" y explicá brevemente el problema.
-    - Usá español argentino simple y tono cálido, no punitivo.
+    CRITERIOS DE EVALUACIÓN OBLIGATORIOS PARA CADA EJERCICIO:
+    1. EVALUACIÓN DEL CONTRAARGUMENTO:
+       - Si el contraargumento redactado está claramente mal (es incoherente, frase vacía, no plantea una objeción válida o razonable al Reappraisal 1):
+         INDICARLO EXPLICITAMENTE al inicio del feedback (comenzando con "⚠️") Y DAR UN EJEMPLO O EXPLICACIÓN CONCRETA DE CÓMO DEBERÍA FORMULARSE.
+         Ejemplo: "⚠️ El contraargumento no plantea una objeción clara. Debería cuestionar la premisa, por ejemplo: 'Pero si confiaran en mí, me apoyarían de entrada'."
+    2. EVALUACIÓN DEL NUEVO REAPPRAISAL (Reappraisal 2):
+       - Si el contraargumento era válido, verificar si el nuevo reappraisal integra o desarma esa objeción manteniendo el realismo (sin caer en positivismo mágico, sin negar hechos ni minimizar emociones).
+    3. SÍNTESIS DEL FEEDBACK:
+       - Si todo es excelente y correcto: empezá con "✅" y destacá lo que funcionó.
+       - Si el contraargumento o el nuevo reappraisal fallan o son vacíos: empezá con "⚠️" e incluyo la corrección/ejemplo explicativo.
+       - Si hay un matiz sutil para sugerir: empezá con "💡".
+       - Máximo 35 palabras por ejercicio. Español argentino simple, tono empático y constructivo.
 
     EJERCICIOS A EVALUAR:
     {ejercicios_json}
 
     Devolvé exactamente 5 correcciones en el array "correcciones", en el mismo
-    orden que los ejercicios. El campo "feedback" de cada una debe tener máximo 15 palabras.
+    orden que los ejercicios. El campo "feedback" de cada una debe tener máximo 35 palabras.
     """
 
     client = _obtener_gemini_client()

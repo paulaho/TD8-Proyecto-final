@@ -13,11 +13,15 @@ create table if not exists sesiones_texto_libre (
     -- Cada item: { "situacion": str, "reappraisal_inicial": str }
     situaciones jsonb not null,
 
-    -- Los 5 contraargumentos escritos por el usuario en Fase 1
+    -- Los 5 contraargumentos escritos por el usuario
     -- Array de strings
     fase1_respuestas jsonb not null,
 
-    -- Los 5 nuevos reappraisals escritos por el usuario en Fase 2
+    -- Las 5 emociones registradas por el usuario por cada contraargumento
+    -- Array de strings
+    emociones jsonb,
+
+    -- Los 5 nuevos reappraisals escritos por el usuario (Reappraisal 2)
     -- Array de strings
     fase2_respuestas jsonb not null,
 
@@ -36,5 +40,5 @@ create index if not exists idx_sesiones_texto_libre_usuario
 alter table sesiones_texto_libre disable row level security;
 
 -- Si la tabla ya existía y hay que agregar columnas nuevas sin perder datos:
--- alter table sesiones_texto_libre add column if not exists categoria text not null default 'familia';
+alter table sesiones_texto_libre add column if not exists emociones jsonb;
 
