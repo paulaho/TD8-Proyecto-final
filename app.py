@@ -71,14 +71,6 @@ from dre.mento import (
 from dre.ia_niveles import (
     generar_batch_familia_ia,
     generar_batch_familia_ia_adaptativo,
-    generar_batch_vinculos_ia,
-    generar_batch_vinculos_ia_adaptativo,
-    generar_batch_salud_ia,
-    generar_batch_salud_ia_adaptativo,
-    generar_batch_trabajo_estudio_ia,
-    generar_batch_trabajo_estudio_ia_adaptativo,
-    generar_batch_ia,
-    generar_batch_ia_adaptativo,
 )
 
 from dre.ia_texto_libre import (
@@ -441,17 +433,18 @@ def main(page: ft.Page):
         "_intentos_nivel_ia": 0,
         "_errores_nivel_ia": [],       # <-- 
         "realizo_test_inicial": False,  # <-- TEMP TEST
-        # --- MODO TEXTO LIBRE / CONTRAARGUMENTO ---
+        "perfil_contexto": {},          # <-- TEMP TEST
+        # --- MODO TEXTO LIBRE ---
         "_tl_batches_queue": [],        # cola de batches pre-generados (lista de listas de 5 situaciones)
         "_tl_batch_actual": [],         # batch en juego (5 situaciones con situacion + reappraisal_inicial)
         "_tl_batch_generando": False,   # lock para no generar dos veces en paralelo
         "_tl_batches_jugados": 0,       # contador absoluto de batches completados (para trigger de recarga)
         "_tl_historial": [],            # historial de desempeño para batches adaptativos
-        "_tl_contraargumentos": [],     # contraargumentos escritos por el usuario
-        "_tl_emociones": [],            # emociones registradas por el usuario
-        "_tl_nuevos_reappraisals": [],  # nuevos reappraisals (Reappraisal 2) escritos por el usuario
+        "_tl_contraargumentos": [],
+        "_tl_emociones": [],
+        "_tl_nuevos_reappraisals": [],
+        "_tl_vio_tutorial": False,
         "_tl_correcciones": [],         # feedback de la IA (lista de dicts con "feedback")
-        "_tl_vio_tutorial": False,      # flag para tutorial estático
     }
 
     # ==========================================================
@@ -2140,29 +2133,23 @@ def main(page: ft.Page):
         if estado.get("_niveles_ia_batch"):
             return
 
-    async def precargar_batch_ia(categoria="familia"):
-
-        if estado.get("_niveles_ia_batch") and estado.get("_categoria_ia_actual") == categoria:
-            return
-
         if estado.get("_batch_ia_generando"):
             return
 
         estado["_batch_ia_generando"] = True
 
         try:
-            print(f"Precargando batch IA ({categoria})...")
+            print("Precargando batch IA...")
 
             niveles = await asyncio.to_thread(
-                generar_batch_ia, categoria, estado
+                generar_batch_familia_ia, estado
             )
 
             estado["_niveles_ia_batch"] = niveles
             estado["_nivel_ia_actual"] = 0
-            estado["_categoria_ia_actual"] = categoria
 
             print(
-                f"Batch IA precargado ({categoria}): {len(niveles)} niveles"
+                f"Batch IA precargado: {len(niveles)} niveles"
             )
 
         except Exception as e:
@@ -2175,7 +2162,7 @@ def main(page: ft.Page):
             estado["_batch_ia_generando"] = False
 
 
-    async def precargar_siguiente_batch_ia(historial_reciente, categoria="familia"):
+    async def precargar_siguiente_batch_ia(historial_reciente):
 
         if estado.get("_siguiente_batch_ia"):
             return
@@ -2186,11 +2173,10 @@ def main(page: ft.Page):
         estado["_siguiente_batch_ia_generando"] = True
 
         try:
-            print(f"Generando próximos 10 niveles en segundo plano ({categoria})...")
+            print("Generando próximos 10 niveles en segundo plano...")
 
             niveles = await asyncio.to_thread(
-                generar_batch_ia_adaptativo,
-                categoria,
+                generar_batch_familia_ia_adaptativo,
                 historial_reciente,
                 estado,
             )
@@ -2198,7 +2184,7 @@ def main(page: ft.Page):
             estado["_siguiente_batch_ia"] = niveles
 
             print(
-                f"Próximo batch IA listo ({categoria}): {len(niveles)} niveles"
+                f"Próximo batch IA listo: {len(niveles)} niveles"
             )
 
         except Exception as e:
@@ -2210,7 +2196,7 @@ def main(page: ft.Page):
         finally:
             estado["_siguiente_batch_ia_generando"] = False
 
-    async def mostrar_reappraisal_generando_ia(categoria_clave="familia"):
+    async def mostrar_reappraisal_generando_ia():
 
         pantalla(
             ft.ProgressRing(),
@@ -2224,34 +2210,31 @@ def main(page: ft.Page):
 
             if estado.get("_historial_ia"):
 
-                print(f"Generando batch adaptativo para {categoria_clave}")
+                print("Generando batch adaptativo")
 
                 niveles = await asyncio.to_thread(
-                    generar_batch_ia_adaptativo,
-                    categoria_clave,
+                    generar_batch_familia_ia_adaptativo,
                     estado["_historial_ia"],
                     estado,
                 )
 
             else:
 
-                print(f"Generando primer batch para {categoria_clave}")
+                print("Generando primer batch")
 
                 niveles = await asyncio.to_thread(
-                    generar_batch_ia,
-                    categoria_clave,
+                    generar_batch_familia_ia,
                     estado,
                 )
             estado["_niveles_ia_batch"] = niveles
             estado["_nivel_ia_actual"] = 0
-            estado["_categoria_ia_actual"] = categoria_clave
 
             print(
-                f"Batch generado ({categoria_clave}): {len(niveles)} niveles"
+                f"Batch generado: {len(niveles)} niveles"
             )
 
             mostrar_reappraisal_juego_ia(
-                categoria_clave,
+                "familia",
                 0,
             )
 
@@ -2693,14 +2676,15 @@ def main(page: ft.Page):
             estado["_tl_batch_generando"] = False
 
     # ==========================================================
-    # MODO CONTRAARGUMENTO — Tutorial Estático (Ejemplo Hardcodeado)
+    # MODO TEXTO LIBRE — Tutorial
     # ==========================================================
 
     def mostrar_tutorial_texto_libre():
         """
-        Pantalla explicativa de práctica con un ejemplo estático hardcodeado
-        (sin llamadas a la API/tokens) para que el usuario entienda la mecánica.
+        Tutorial progresivo del Modo Escritura.
+        Muestra cada parte del ejemplo paso a paso.
         """
+
         sub_paso = {"valor": 0}
 
         def continuar_al_juego(e):
@@ -2714,24 +2698,32 @@ def main(page: ft.Page):
         def renderizar():
             controles = [
                 ft.Icon(
-                    ft.Icons.AUTO_AWESOME,
-                    size=48,
+                    ft.Icons.EDIT_NOTE,
+                    size=56,
                     color=MENTO_CELESTE,
                 ),
                 ft.Text(
-                    "Juego: Contraargumento",
-                    size=22,
+                    "Modo Escritura",
+                    size=24,
                     weight=ft.FontWeight.BOLD,
                     text_align=ft.TextAlign.CENTER,
                     font_family=MENTO_FUENTE,
                 ),
                 ft.Text(
-                    "Tutorial de práctica — Leé este ejemplo paso a paso para aprender la dinámica:",
-                    size=13,
+                    "Vamos a ver un ejemplo paso a paso.",
+                    size=14,
                     color=COLOR_TEXTO_MEDIO,
                     text_align=ft.TextAlign.CENTER,
                 ),
-                # PASO A: SITUACIÓN
+                ft.Text(
+                    "Ejemplo",
+                    weight=ft.FontWeight.BOLD,
+                    size=13,
+                    color=MENTO_CELESTE,
+                    font_family=MENTO_FUENTE,
+                ),
+
+                # SITUACIÓN
                 ft.Container(
                     content=ft.Column(
                         [
@@ -2742,26 +2734,27 @@ def main(page: ft.Page):
                                 color=COLOR_TEXTO_FUERTE,
                             ),
                             ft.Text(
-                                "En una comida familiar, Coco expresa que quiere dejar su trabajo "
-                                "de oficina para dedicarse al arte. Sus padres le dicen que es una irresponsabilidad.",
+                                "En una cena familiar, le contás a tu hermano un "
+                                "proyecto que te entusiasma mucho y te responde "
+                                "diciendo que deberías buscarte un trabajo más seguro.",
                                 size=13,
                                 color=COLOR_TEXTO_FUERTE,
                             ),
                         ],
                         spacing=4,
                     ),
-                    padding=12,
-                    border_radius=10,
+                    padding=10,
+                    border_radius=8,
                     bgcolor=MENTO_AMARILLO_CLARO,
                     width=ancho_campo(),
                 ),
             ]
 
-            # PASO A -> Botón Ver Reappraisal
+            # PASO 0
             if sub_paso["valor"] == 0:
                 controles.append(
-                    ft.Button(
-                        "Ver Reappraisal →",
+                    ft.ElevatedButton(
+                        "Ver reappraisal →",
                         on_click=lambda _: avanzar(1),
                         width=ancho_campo(),
                         height=48,
@@ -2770,40 +2763,40 @@ def main(page: ft.Page):
                     )
                 )
 
-            # PASO B: REAPPRAISAL 1 (DADO POR LA APP)
+            # REAPPRAISAL INICIAL
             if sub_paso["valor"] >= 1:
                 controles.append(
                     ft.Container(
                         content=ft.Column(
                             [
                                 ft.Text(
-                                    "💭 Reappraisal 1 (Dado por la app)",
+                                    "💭 Reappraisal inicial",
                                     weight=ft.FontWeight.W_600,
                                     size=12,
                                     color=COLOR_TEXTO_FUERTE,
                                 ),
                                 ft.Text(
-                                    "\"Sus padres se preocupan por su estabilidad económica y "
-                                    "reaccionan desde el miedo, no porque no confíen en sus capacidades.\"",
+                                    "A lo mejor me lo dice desde su propia inseguridad "
+                                    "y preocupación por mi bienestar, no porque quiera "
+                                    "tirarme abajo.",
                                     size=13,
                                     color=COLOR_TEXTO_FUERTE,
-                                    italic=True,
                                 ),
                             ],
                             spacing=4,
                         ),
-                        padding=12,
-                        border_radius=10,
+                        padding=10,
+                        border_radius=8,
                         bgcolor=MENTO_CELESTE_CAJA,
                         width=ancho_campo(),
                     )
                 )
 
-            # PASO B -> Botón Escribir Contraargumento
+            # PASO 1
             if sub_paso["valor"] == 1:
                 controles.append(
-                    ft.Button(
-                        "Escribir Contraargumento →",
+                    ft.ElevatedButton(
+                        "Ver contraargumento →",
                         on_click=lambda _: avanzar(2),
                         width=ancho_campo(),
                         height=48,
@@ -2812,107 +2805,110 @@ def main(page: ft.Page):
                     )
                 )
 
-            # PASO C: CONTRAARGUMENTO (EJEMPLO)
+            # CONTRAARGUMENTO
             if sub_paso["valor"] >= 2:
                 controles.append(
                     ft.Container(
                         content=ft.Column(
                             [
                                 ft.Text(
-                                    "✍️ Contraargumento (Ejemplo)",
+                                    "✍️ Contraargumento",
                                     weight=ft.FontWeight.W_600,
                                     size=12,
                                     color=COLOR_TEXTO_FUERTE,
                                 ),
                                 ft.Text(
-                                    "\"Pero si confiaran en ella, la apoyarían en vez de tirarle abajo el proyecto de entrada.\"",
+                                    "Pero si confiara en mí, me apoyaría en lugar "
+                                    "de dudar de lo que puedo hacer.",
                                     size=13,
                                     color=COLOR_TEXTO_FUERTE,
-                                    italic=True,
-                                ),
-                            ],
-                            spacing=4,
-                        ),
-                        padding=12,
-                        border_radius=10,
-                        bgcolor=COLOR_CAJA_SUAVE,
-                        width=ancho_campo(),
-                    )
-                )
-
-            # PASO C -> Botón Registrar Emoción y Nuevo Reappraisal
-            if sub_paso["valor"] == 2:
-                controles.append(
-                    ft.Button(
-                        "Registrar Emoción y Nuevo Reappraisal →",
-                        on_click=lambda _: avanzar(3),
-                        width=ancho_campo(),
-                        height=48,
-                        bgcolor=MENTO_VERDE_OSCURO,
-                        color=ft.Colors.WHITE,
-                    )
-                )
-
-            # PASO D: EMOCIÓN + NUEVO REAPPRAISAL / REAPPRAISAL 2 (EJEMPLO)
-            if sub_paso["valor"] >= 3:
-                controles.append(
-                    ft.Container(
-                        content=ft.Column(
-                            [
-                                ft.Text(
-                                    "❤️ Emoción asociada (Ejemplo)",
-                                    weight=ft.FontWeight.W_600,
-                                    size=12,
-                                    color=COLOR_TEXTO_FUERTE,
-                                ),
-                                ft.Text(
-                                    "\"Frustración, enojo e incomprensión.\"",
-                                    size=13,
-                                    color=COLOR_TEXTO_FUERTE,
-                                    italic=True,
                                 ),
                             ],
                             spacing=4,
                         ),
                         padding=10,
                         border_radius=8,
-                        bgcolor=MENTO_ROSA,
+                        bgcolor=COLOR_CAJA_SUAVE,
                         width=ancho_campo(),
                     )
                 )
 
+
+            # EMOCIÓN
+            if sub_paso["valor"] >= 3:
                 controles.append(
                     ft.Container(
                         content=ft.Column(
                             [
                                 ft.Text(
-                                    "🔄 Nuevo Reappraisal / Reappraisal 2 (Ejemplo)",
+                                    "❤️ Emoción",
                                     weight=ft.FontWeight.W_600,
                                     size=12,
                                     color=COLOR_TEXTO_FUERTE,
                                 ),
                                 ft.Text(
-                                    "\"Es comprensible sentir rabia, pero la falta de apoyo inicial suele "
-                                    "ser miedo a lo desconocido de los padres; Coco puede demostrarles su proyecto con un plan realista.\"",
+                                    "Me siento frustrado y poco apoyado por mi hermano.",
                                     size=13,
                                     color=COLOR_TEXTO_FUERTE,
-                                    italic=True,
                                 ),
                             ],
                             spacing=4,
                         ),
-                        padding=12,
-                        border_radius=10,
+                        padding=10,
+                        border_radius=8,
+                        bgcolor=COLOR_CAJA_SUAVE,
+                        width=ancho_campo(),
+                    )
+                )
+
+            # PASO 2
+            if sub_paso["valor"] == 2:
+                controles.append(
+                    ft.ElevatedButton(
+                        "Ver emoción →",
+                        on_click=lambda _: avanzar(3),
+                        width=ancho_campo(),
+                        height=48,
+                        bgcolor=MENTO_CELESTE,
+                        color=ft.Colors.WHITE,
+                    )
+                )
+
+            # NUEVO REAPPRAISAL
+            if sub_paso["valor"] >= 4:
+                controles.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Text(
+                                    "🔄 Nuevo Reappraisal",
+                                    weight=ft.FontWeight.W_600,
+                                    size=12,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                                ft.Text(
+                                    "Es comprensible que quiera apoyarme, pero su "
+                                    "forma de expresar cuidado es previniendo riesgos. "
+                                    "Que tenga dudas no significa que yo no sea capaz "
+                                    "de lograrlo.",
+                                    size=13,
+                                    color=COLOR_TEXTO_FUERTE,
+                                ),
+                            ],
+                            spacing=4,
+                        ),
+                        padding=10,
+                        border_radius=8,
                         bgcolor=COLOR_CAJA_INFO,
                         width=ancho_campo(),
                     )
                 )
 
-            # PASO D -> Botón Ver Feedback
+            # PASO 3
             if sub_paso["valor"] == 3:
                 controles.append(
-                    ft.Button(
-                        "Ver Feedback de Ejemplo →",
+                    ft.ElevatedButton(
+                        "Ver feedback →",
                         on_click=lambda _: avanzar(4),
                         width=ancho_campo(),
                         height=48,
@@ -2921,36 +2917,27 @@ def main(page: ft.Page):
                     )
                 )
 
-            # CORRECCIÓN / FEEDBACK DE EJEMPLO
+            # FEEDBACK FINAL
             if sub_paso["valor"] >= 4:
                 controles.append(
                     ft.Container(
-                        content=ft.Column(
-                            [
-                                ft.Text(
-                                    "🤖 Feedback de la IA (Ejemplo)",
-                                    weight=ft.FontWeight.W_600,
-                                    size=12,
-                                    color=COLOR_TEXTO_FUERTE,
-                                ),
-                                ft.Text(
-                                    "\"✓ Reappraisal excelente. Desarma la objeción separando la falta de apoyo inicial de la capacidad personal.\"",
-                                    size=13,
-                                    color=COLOR_TEXTO_FUERTE,
-                                    weight=ft.FontWeight.W_500,
-                                ),
-                            ],
-                            spacing=4,
+                        content=ft.Text(
+                            "✅ ¡Excelente reencuadre! Pudiste separar el afecto "
+                            "y la intención de tu hermano de tus propias capacidades "
+                            "sin caer en positivismo mágico.",
+                            size=13,
+                            color=COLOR_TEXTO_FUERTE,
+                            italic=True,
                         ),
-                        padding=12,
-                        border_radius=10,
+                        padding=10,
+                        border_radius=8,
                         bgcolor=COLOR_EXITO_CAJA,
                         width=ancho_campo(),
                     )
                 )
 
                 controles.append(
-                    ft.Button(
+                    ft.ElevatedButton(
                         "¡Entendido, jugar!",
                         icon=ft.Icons.PLAY_ARROW,
                         on_click=continuar_al_juego,
@@ -2964,9 +2951,8 @@ def main(page: ft.Page):
             pantalla(*controles)
 
         renderizar()
-
     # ==========================================================
-    # MODO CONTRAARGUMENTO — Entrada al juego
+    # MODO TEXTO LIBRE — Entrada al juego
     # ==========================================================
 
     async def _iniciar_modo_escritura():
@@ -3046,6 +3032,7 @@ def main(page: ft.Page):
                 ),
             )
 
+
     def abrir_modo_escritura(e):
         if not estado.get("_tl_vio_tutorial"):
             ir_a(mostrar_tutorial_texto_libre)
@@ -3053,7 +3040,7 @@ def main(page: ft.Page):
             page.run_task(_iniciar_modo_escritura)
 
     # ==========================================================
-    # MODO CONTRAARGUMENTO — Flujo Secuencial por Situación
+    # MODO TEXTO LIBRE — Fase 1: Contraargumentos
     # ==========================================================
 
     def mostrar_situacion_texto_libre(indice):
@@ -3396,18 +3383,17 @@ def main(page: ft.Page):
 
     async def mostrar_texto_libre_evaluando():
         """
-        Envía 1 sola llamada batch (JSON) a Gemini con las 5 tuplas completas
-        (Situación, Reappraisal 1, Contraargumento, Emoción, Reappraisal 2).
+        Pantalla de espera mientras la IA evalúa las 5 respuestas en batch.
         """
         pantalla(
             ft.ProgressRing(),
             ft.Text(
-                "La IA está evaluando tus 5 situaciones...",
+                "La IA está revisando tus respuestas...",
                 text_align=ft.TextAlign.CENTER,
                 size=16,
             ),
             ft.Text(
-                "Revisando contraargumentos, emociones y nuevos reappraisals...",
+                "Esto tarda unos segundos.",
                 text_align=ft.TextAlign.CENTER,
                 color=COLOR_TEXTO_SUAVE,
                 size=13,
@@ -3415,13 +3401,13 @@ def main(page: ft.Page):
             mostrar_volver=False,
         )
 
+        # Armar los ejercicios completos para la evaluación
         ejercicios = [
             {
                 "situacion": estado["_tl_batch_actual"][i]["situacion"],
                 "reappraisal_inicial": estado["_tl_batch_actual"][i]["reappraisal_inicial"],
-                "contraargumento": estado["_tl_contraargumentos"][i],
-                "emocion": estado["_tl_emociones"][i],
-                "nuevo_reappraisal": estado["_tl_nuevos_reappraisals"][i],
+                "contraargumento": estado["_tl_fase1_respuestas"][i],
+                "nuevo_reappraisal": estado["_tl_fase2_respuestas"][i],
             }
             for i in range(5)
         ]
@@ -3433,54 +3419,55 @@ def main(page: ft.Page):
             )
             estado["_tl_correcciones"] = correcciones
 
-            # Guardar historial para batches adaptativos futuros
+            # Guardar historial de desempeño para batches adaptativos futuros
             estado["_tl_historial"].extend([
                 {
                     "situacion": ejercicios[i]["situacion"],
                     "reappraisal_inicial": ejercicios[i]["reappraisal_inicial"],
                     "contraargumento": ejercicios[i]["contraargumento"],
-                    "emocion": ejercicios[i]["emocion"],
                     "nuevo_reappraisal": ejercicios[i]["nuevo_reappraisal"],
                     "feedback": correcciones[i]["feedback"],
                 }
                 for i in range(5)
             ])
+            # Mantener historial manejable (últimas 15 entradas)
             if len(estado["_tl_historial"]) > 15:
                 estado["_tl_historial"] = estado["_tl_historial"][-15:]
 
-            # Persistir en Supabase
+            # Persistir en Supabase (best-effort, no bloquea si falla)
             if not estado.get("modo_local"):
                 try:
                     await asyncio.to_thread(
                         guardar_sesion_texto_libre_supabase,
                         estado["usuario_id"],
                         estado["_tl_batch_actual"],
-                        estado["_tl_contraargumentos"],
-                        estado["_tl_nuevos_reappraisals"],
+                        estado["_tl_fase1_respuestas"],
+                        estado["_tl_fase2_respuestas"],
                         correcciones,
-                        estado["_tl_emociones"],
                     )
                 except Exception as e_db:
                     print("Error guardando sesión en Supabase (no crítico):", repr(e_db))
 
+            # Incrementar contador de batches jugados
             estado["_tl_batches_jugados"] += 1
 
-            # Recarga asíncrona de 3 nuevos batches en background al completar el Batch 2 (o queue baja)
-            if estado["_tl_batches_jugados"] % 3 == 2 or len(estado.get("_tl_batches_queue", [])) <= 1:
-                print(f"Trigger de recarga en background: {estado['_tl_batches_jugados']} batches jugados")
+            # Disparar recarga si se acaba de completar el 2do batch de un grupo de 3
+            # (batches_jugados % 3 == 2 → índices 1, 4, 7, 10, ...)
+            if estado["_tl_batches_jugados"] % 3 == 2:
+                print(f"Trigger de recarga: {estado['_tl_batches_jugados']} batches jugados")
                 page.run_task(recargar_batches_texto_libre)
 
             mostrar_texto_libre_resultados()
 
         except Exception as e:
-            print("Error evaluando batch contraargumento:", repr(e))
+            print("Error evaluando batch texto libre:", repr(e))
             pantalla(
                 ft.Icon(ft.Icons.ERROR_OUTLINE, size=50, color=ft.Colors.RED),
                 ft.Text(
                     "No pudimos obtener la corrección de la IA. Revisá tu conexión.",
                     text_align=ft.TextAlign.CENTER,
                 ),
-                ft.Button(
+                ft.ElevatedButton(
                     "Reintentar",
                     on_click=lambda _: page.run_task(mostrar_texto_libre_evaluando),
                     width=ancho_campo(),
@@ -3489,7 +3476,7 @@ def main(page: ft.Page):
             )
 
     # ==========================================================
-    # MODO CONTRAARGUMENTO — Resultados y Modal de Contexto Completo
+    # MODO TEXTO LIBRE — Resultados expandibles
     # ==========================================================
 
     def mostrar_texto_libre_resultados():
@@ -3686,45 +3673,47 @@ def main(page: ft.Page):
             )
             items.append(card)
 
-        def jugar_otro(e):
-            page.run_task(_iniciar_modo_escritura)
+            def jugar_otro(e):
+                page.run_task(_iniciar_modo_escritura)
 
-        def volver_al_menu(e):
-            ir_a(lambda: mostrar_reappraisal_juegos_niveles("familia"))
+            def volver_al_menu(e):
+                ir_a(lambda: mostrar_reappraisal_juegos_niveles("familia"))
 
-        pantalla(
-            ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=44, color=COLOR_EXITO),
-            ft.Text(
-                "¡Bloque Completado!",
-                size=22,
-                weight=ft.FontWeight.BOLD,
-                text_align=ft.TextAlign.CENTER,
-                font_family=MENTO_FUENTE,
-            ),
-            ft.Text(
-                "Tocá cualquier tarjeta para abrir el modal con el contexto completo.",
-                color=COLOR_TEXTO_MEDIO,
-                text_align=ft.TextAlign.CENTER,
-                size=13,
-            ),
-            *items,
-            ft.Button(
-                "Siguiente Bloque de Situaciones 🚀",
-                icon=ft.Icons.ARROW_FORWARD,
-                on_click=jugar_otro,
-                width=ancho_campo(),
-                height=48,
-                bgcolor=MENTO_CELESTE,
-                color=ft.Colors.WHITE,
-            ),
-            ft.OutlinedButton(
-                "Volver al Menú de Familia",
-                on_click=volver_al_menu,
-                width=ancho_campo(),
-                height=48,
-            ),
-            mostrar_volver=False,
-        )
+            pantalla(
+                ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=44, color=COLOR_EXITO),
+                ft.Text(
+                    "Bloque completado",
+                    size=22,
+                    weight=ft.FontWeight.BOLD,
+                    text_align=ft.TextAlign.CENTER,
+                    font_family=MENTO_FUENTE,
+                ),
+                ft.Text(
+                    "Tocá cada situación para ver el contexto completo.",
+                    color=COLOR_TEXTO_MEDIO,
+                    text_align=ft.TextAlign.CENTER,
+                    size=13,
+                ),
+                *items,
+                ft.ElevatedButton(
+                    "Jugar otro bloque",
+                    icon=ft.Icons.REFRESH,
+                    on_click=jugar_otro,
+                    width=ancho_campo(),
+                    height=48,
+                    bgcolor=MENTO_CELESTE,
+                    color=ft.Colors.WHITE,
+                ),
+                ft.OutlinedButton(
+                    "Volver al menú",
+                    on_click=volver_al_menu,
+                    width=ancho_campo(),
+                    height=48,
+                ),
+                mostrar_volver=False,
+            )
+
+        renderizar()
 
     # ==========================================================
     # MODO JUEGOS DE NIVELES — Pantalla de categoría
@@ -3795,66 +3784,65 @@ def main(page: ft.Page):
                 )
             )
 
-        cat_clave = categoria_clave
-
-        async def abrir_nivel_ia(e):
-
-            # Si ya están listos para esta categoría, abrir
-            if estado.get("_niveles_ia_batch") and estado.get("_categoria_ia_actual") == cat_clave:
-                mostrar_reappraisal_juego_ia(
-                    cat_clave,
-                    0,
-                )
-                return
-
-            # Si todavía se están generando desde el login, esperar
-            pantalla(
-                ft.ProgressRing(),
-                ft.Text(
-                    "Preparando tus niveles...",
-                    text_align=ft.TextAlign.CENTER,
-                ),
-            )
-
-            while estado.get("_batch_ia_generando"):
-                await asyncio.sleep(0.2)
-
-            # Cuando terminó la precarga
-            if estado.get("_niveles_ia_batch") and estado.get("_categoria_ia_actual") == cat_clave:
-                mostrar_reappraisal_juego_ia(
-                    cat_clave,
-                    0,
-                )
-            else:
-                await mostrar_reappraisal_generando_ia(cat_clave)
-
-        filas.append(
-            ft.Container(
-                content=ft.Row(
-                    [
-                        ft.Icon(
-                            ft.Icons.AUTO_AWESOME,
-                            color=ft.Colors.WHITE,
-                            size=26,
-                        ),
-                        ft.Text(
-                            "Nivel IA",
-                            color=ft.Colors.WHITE,
-                            weight=ft.FontWeight.BOLD,
-                            font_family=MENTO_FUENTE,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
-                padding=16,
-                border_radius=14,
-                bgcolor=MENTO_ROSA_TEXTO,
-                width=ancho_campo(),
-                on_click=abrir_nivel_ia,
-            )
-        )
-
         if categoria_clave == "familia":
+
+
+            async def abrir_nivel_ia(e):
+
+                # Si ya están listos, abrir
+                if estado.get("_niveles_ia_batch"):
+                    mostrar_reappraisal_juego_ia(
+                        "familia",
+                        0,
+                    )
+                    return
+
+                # Si todavía se están generando desde el login, esperar
+                pantalla(
+                    ft.ProgressRing(),
+                    ft.Text(
+                        "Preparando tus niveles...",
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                )
+
+                while estado.get("_batch_ia_generando"):
+                    await asyncio.sleep(0.2)
+
+                # Cuando terminó la precarga
+                if estado.get("_niveles_ia_batch"):
+                    mostrar_reappraisal_juego_ia(
+                        "familia",
+                        0,
+                    )
+                else:
+                    await mostrar_reappraisal_generando_ia()
+
+            filas.append(
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(
+                                ft.Icons.AUTO_AWESOME,
+                                color=ft.Colors.WHITE,
+                                size=26,
+                            ),
+                            ft.Text(
+                                "Nivel IA",
+                                color=ft.Colors.WHITE,
+                                weight=ft.FontWeight.BOLD,
+                                font_family=MENTO_FUENTE,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                    padding=16,
+                    border_radius=14,
+                    bgcolor=MENTO_ROSA_TEXTO,
+                    width=ancho_campo(),
+                    on_click=abrir_nivel_ia,
+                )
+            )
 
             # Tarjeta: Modo Escritura (texto libre)
             filas.append(
