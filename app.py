@@ -2103,8 +2103,9 @@ def main(page: ft.Page):
         tarjetas = []
         for cat in MENTO_CATEGORIAS:
             def elegir(e, clave=cat["clave"]):
-                ir_a(lambda: mostrar_reappraisal_juegos_niveles(clave))
-
+                ir_a(
+                    lambda clave=clave: mostrar_reappraisal_juegos_niveles(clave)
+                )
             tarjetas.append(
                 ft.Container(
                     content=ft.Row(
@@ -3894,12 +3895,12 @@ def main(page: ft.Page):
                 )
             )
 
-            pantalla(
-                ft.Icon(cat["icono"], size=44, color=cat["color"]),
-                ft.Text(cat["nombre"], size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, font_family=MENTO_FUENTE),
-                ft.Text(f"{len(completados)} de {len(niveles)} niveles completados.", color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
-                *filas,
-            )
+        pantalla(
+            ft.Icon(cat["icono"], size=44, color=cat["color"]),
+            ft.Text(cat["nombre"], size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, font_family=MENTO_FUENTE),
+            ft.Text(f"{len(completados)} de {len(niveles)} niveles completados.", color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
+            *filas,
+        )
 
     def mostrar_reappraisal_juego_nivel(categoria_clave, nivel):
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
