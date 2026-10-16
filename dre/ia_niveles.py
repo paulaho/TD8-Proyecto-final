@@ -75,6 +75,8 @@ def _instrucciones_niveles(inicio):
 def _generar_batch(estado, inicio, historial=None):
     contexto = estado.get('perfil_contexto', {})
     genero = estado.get('genero', 'no especificado')
+    edad = contexto.get('edad', estado.get('edad'))
+    edad_str = str(edad) if edad not in (None, '') else 'No especificada'
     nivel_reg = contexto.get('nivel_regulacion', 1)
     familiaridad = contexto.get('familiaridad_regulacion', 'No especificado')
     historial_texto = json.dumps(historial or [], ensure_ascii=False, indent=2)
@@ -85,14 +87,43 @@ Categoría: Familia. Estrategia que se evalúa: Reconstrual. Tipo: opcion_multip
 Cada ejercicio debe tener UNA SOLA respuesta correcta y respetar EXACTAMENTE su receta individual.
 Generá las opciones EN ORDEN FIJO: primero la correcta y luego los distractores por grupo, G1, G2, G3, G4 y G5 según la receta. No mezcles las opciones: Python las mezclará después.
 
-PERFIL PARA ELEGIR CONTEXTOS REALISTAS (no cambia las cantidades ni las bandas):
+PERFIL DEL USUARIO PARA PERSONALIZAR SITUACIONES:
 - Género: {genero}
+- Edad: {edad_str}
 - Convivencia: {contexto.get('convivencia', 'No especificado')}
 - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
 - Ocupación: {contexto.get('ocupacion', 'No especificado')}
 - Estado en pareja: {contexto.get('pareja', 'No especificado')}
 - Familiaridad con regulación emocional: Nivel {nivel_reg} ({familiaridad}).
-Usá lenguaje empático y simple independientemente de la familiaridad.
+
+REGLAS OBLIGATORIAS DE PERSONALIZACIÓN:
+- Si vive solo/a: usar llamadas, mensajes, visitas y encuentros familiares.
+- Si vive con sus padres: usar situaciones de convivencia, rutinas y espacios compartidos.
+- Si vive con pareja: combinar familia de origen y, ocasionalmente, familia política.
+- Si vive con amigos/as o compañeros/as: usar situaciones de contacto con su familia de origen.
+- Si vive con hijos/as: incluir crianza y relaciones con sus propios padres.
+- Si no tiene hermanos: NO incluir hermanos en ninguna situación.
+- Si tiene hermanos: incluirlos en algunas situaciones, no en todas.
+- Si no está en pareja: NO mencionar pareja ni familia política.
+- Si está en pareja: incluir familia política en un máximo de 2 situaciones.
+- Adaptar los escenarios, responsabilidades y vocabulario a la edad.
+- Usar la ocupación solamente como contexto secundario.
+- Respetar el género sin utilizar estereotipos.
+- No mencionar literalmente los datos del perfil.
+
+VARIEDAD DE SITUACIONES:
+- Los 10 escenarios deben ser distintos.
+- Repartir los vínculos entre madre, padre, hermanos si corresponde, abuelos, tíos, primos, hijos y familia política según el perfil.
+- Ningún vínculo debe protagonizar más de 3 situaciones.
+- Usar conflictos cotidianos, concretos y realistas.
+- Describir cada situación en 2 a 4 oraciones, en segunda persona.
+- Evitar clichés como críticas en la mesa o discusiones por el teléfono.
+- Usar español argentino simple y natural.
+
+IMPORTANTE:
+Estas reglas personalizan solamente los escenarios.
+NO modifican las cantidades de opciones, los grupos G1-G5
+ni las bandas de dificultad establecidas para cada nivel.
 
 RECETA OBLIGATORIA PARA LOS 10 EJERCICIOS, EN ESTE ORDEN:
 {_instrucciones_niveles(inicio)}
@@ -123,6 +154,14 @@ RESPUESTA CORRECTA: Reconstrual: reconoce lo difícil y amplía la interpretaci�
 mismos hechos sin inventar certezas ni minimizar la emoción. Debe ser claramente la opción
 más adecuada para la estrategia pedida. Las opciones G5 pueden ser saludables, pero NO
 pueden constituir Reconstrual; evitá ambigüedades entre la correcta y las demás.
+
+REGLAS DE LONGITUD Y REDACCIÓN:
+- Todas las opciones de un mismo ejercicio deben tener una longitud similar.
+- La diferencia de palabras entre la opción más corta y la más larga no debe superar el 25%.
+- La respuesta correcta NO debe destacar por ser más larga, más elaborada o más específica.
+- Los distractores deben tener un nivel de detalle y una estructura gramatical similares a la correcta.
+- Evitá que la respuesta correcta sea la única que reconoce emociones o utiliza un tono empático.
+- La dificultad debe depender de comprender Reconstrual, no de pistas en la redacción.
 
 SITUACIONES: En bandas 1-2, un hecho simple sin pistas extra; en bandas 3-4, dos datos
 que se matizan sin resolver la duda; en banda 5, incertidumbre real y contexto con historia.
