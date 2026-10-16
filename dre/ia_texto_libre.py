@@ -126,6 +126,8 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1):
     """
     contexto = estado.get("perfil_contexto", {})
     genero = estado.get("genero", "no especificado")
+    edad = estado.get("edad")
+    edad_str = f"{edad} años" if edad is not None else "No especificada"
 
     spec_niveles = _armar_especificacion_niveles(nivel_inicial)
 
@@ -133,19 +135,40 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1):
     Generá EXACTAMENTE 5 situaciones de regulación emocional mediante
     cognitive reappraisal (modo Contraargumento) en la categoría Familia.
 
-    INFORMACIÓN PERSONALIZADA DEL USUARIO (USALA PARA PERSONALIZAR EL CONTEXTO):
+    INFORMACIÓN PERSONALIZADA DEL USUARIO:
     - Género: {genero}
+    - Edad: {edad_str}
     - Convivencia: {contexto.get('convivencia', 'No especificado')}
     - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
     - Ocupación: {contexto.get('ocupacion', 'No especificado')}
     - Estado en pareja: {contexto.get('pareja', 'No especificado')}
+
+    CÓMO USAR LOS DATOS PERSONALES:
+    - Convivencia: ambientá las situaciones según con quién vive:
+      * "Solo/a": contactos a distancia (llamados, mensajes, visitas, reuniones familiares o coordinar encuentros).
+      * "Con mis padres": convivencia diaria con ellos (espacios compartidos, rutinas, comentarios cotidianos).
+      * "Con pareja": mezclar vínculos de origen con familia política cuando sume.
+      * "Con amigos/as / compañeros/as": mezclar la vida compartida con la familia de origen.
+      * "Con hijos/as": la crianza y la relación con sus propios padres.
+    - Hermanos:
+      * Si respondió "No tengo hermanos", NO generes ninguna situación con hermanos ni primos presentados como hermanos.
+      * Si tiene, incluí hermanos en algunas situaciones, no en todas.
+    - Ocupación: usala solo como trasfondo (agenda, cansancio, tiempo, cursada o trabajo), sin convertirla en el tema central.
+    - Pareja: si está en pareja, podés incluir familia política en 1 situación como máximo por batch; si no, no menciones pareja.
+    - Edad: ajustá escenarios y vocabulario a la edad (ej.: estudiante joven vs. adulto con responsabilidades).
+    - Género: usá el género indicado para los personajes en segunda persona cuando corresponda, sin estereotipos.
+
+    VARIEDAD DE VÍNCULOS Y NATURALIDAD:
+    - En cada batch, repartí los vínculos (madre, padre, hermano/a si corresponde, abuelos, tíos/primos, familia política si está en pareja, hijos/as si corresponde).
+    - Ningún vínculo debe aparecer en más de 2 de las 5 situaciones.
+    - No nombres los datos del perfil de forma forzada o literal (ej.: jamás digas "como vivís con tus padres..." o "dado que no tenés hermanos..."); que los datos se noten orgánicamente en el escenario y las interacciones.
 
     ESPECIFICACIÓN OBLIGATORIA DE CADA UNO DE LOS 5 NIVELES (GENERAR EN ESTE ORDEN EXACTO):
     {spec_niveles}
 
     CAMPOS REQUERIDOS PARA CADA SITUACIÓN:
     1. "situacion": descripción breve (2-4 oraciones) de una situación familiar concreta que genera malestar.
-       Usá segunda persona ("te dice", "tu hermana", etc.). Específica y realista.
+       Usá segunda persona ("te dice", "tu madre", etc.). Específica y realista.
     2. "lectura_negativa_implicita": la peor lectura o pensamiento automático que esa situación tiende a disparar
        (ej.: "Seguro está enojado/a conmigo"). Ajustada al Tipo de Lectura pedido.
     3. "reappraisal_inicial": UNA interpretación alternativa inicial razonable que reduzca el malestar, basada en
@@ -208,10 +231,12 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
     """
     Genera 5 situaciones adaptadas al desempeño previo en el juego de Contraargumento.
     IMPORTANTE: La dificultad está fijada estrictamente por los niveles [nivel_inicial .. nivel_inicial+4].
-    El historial solo orienta temas, focos y qué fallas o ángulos reforzar, NUNCA altera la dificultad.
+    El historial solo orienta temas, focos y qué fallas o ángulos reforzar, NUNCA altera la dificultad ni el perfil.
     """
     contexto = estado.get("perfil_contexto", {})
     genero = estado.get("genero", "no especificado")
+    edad = estado.get("edad")
+    edad_str = f"{edad} años" if edad is not None else "No especificada"
 
     spec_niveles = _armar_especificacion_niveles(nivel_inicial)
 
@@ -223,34 +248,66 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
 
     INFORMACIÓN PERSONALIZADA DEL USUARIO:
     - Género: {genero}
+    - Edad: {edad_str}
     - Convivencia: {contexto.get('convivencia', 'No especificado')}
     - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
     - Ocupación: {contexto.get('ocupacion', 'No especificado')}
     - Estado en pareja: {contexto.get('pareja', 'No especificado')}
 
+    CÓMO USAR LOS DATOS PERSONALES:
+    - Convivencia: ambientá las situaciones según con quién vive:
+      * "Solo/a": contactos a distancia (llamados, mensajes, visitas, reuniones familiares o coordinar encuentros).
+      * "Con mis padres": convivencia diaria con ellos (espacios compartidos, rutinas, comentarios cotidianos).
+      * "Con pareja": mezclar vínculos de origen con familia política cuando sume.
+      * "Con amigos/as / compañeros/as": mezclar la vida compartida con la familia de origen.
+      * "Con hijos/as": la crianza y la relación con sus propios padres.
+    - Hermanos:
+      * Si respondió "No tengo hermanos", NO generes ninguna situación con hermanos ni primos presentados como hermanos.
+      * Si tiene, incluí hermanos en algunas situaciones, no en todas.
+    - Ocupación: usala solo como trasfondo (agenda, cansancio, tiempo, cursada o trabajo), sin convertirla en el tema central.
+    - Pareja: si está en pareja, podés incluir familia política en 1 situación como máximo por batch; si no, no menciones pareja.
+    - Edad: ajustá escenarios y vocabulario a la edad (ej.: estudiante joven vs. adulto con responsabilidades).
+    - Género: usá el género indicado para los personajes en segunda persona cuando corresponda, sin estereotipos.
+
+    VARIEDAD DE VÍNCULOS Y NATURALIDAD:
+    - En cada batch, repartí los vínculos (madre, padre, hermano/a si corresponde, abuelos, tíos/primos, familia política si está en pareja, hijos/as si corresponde).
+    - Ningún vínculo debe aparecer en más de 2 de las 5 situaciones.
+    - No nombres los datos del perfil de forma forzada o literal (ej.: jamás digas "como vivís con tus padres..." o "dado que no tenés hermanos..."); que los datos se noten orgánicamente en el escenario y las interacciones.
+
     HISTORIAL DE DESEMPEÑO PREVIO DEL USUARIO:
     {historial_texto_json}
 
     PAUTAS DE ADAPTACIÓN CON EL HISTORIAL:
-    - Analizá qué ángulos o fallas le costaron más al usuario o qué situaciones le generaron reintentos.
-    - Orientá los temas y el foco para ejercitar esos puntos desde ángulos novedosos, SIN alterar la dificultad fijada por los niveles.
-    - No copies situaciones anteriores.
+    - El historial SOLO ajusta temas y foco: analizá qué ángulos o fallas le costaron más al usuario o qué situaciones le generaron reintentos para orientar los temas y ejercitar esos puntos desde ángulos novedosos.
+    - NUNCA alteres ni subas/bajes la dificultad fijada por los niveles (la dificultad está estrictamente determinada por la especificación de niveles).
+    - NUNCA alteres ni relajes la personalización por perfil (respetá rigurosamente las pautas de CÓMO USAR LOS DATOS PERSONALES).
+    - No copies situaciones anteriores del historial.
 
     ESPECIFICACIÓN OBLIGATORIA DE CADA UNO DE LOS 5 NIVELES (GENERAR EN ESTE ORDEN EXACTO):
     {spec_niveles}
 
     CAMPOS REQUERIDOS PARA CADA SITUACIÓN:
     1. "situacion": descripción breve (2-4 oraciones) de una situación familiar concreta que genera malestar.
+       Usá segunda persona ("te dice", "tu madre", etc.). Específica y realista.
     2. "lectura_negativa_implicita": la peor lectura o pensamiento automático que esa situación tiende a disparar.
     3. "reappraisal_inicial": UNA interpretación alternativa inicial razonable que reduzca el malestar, basada en
        Reconstrual y acorde a su Tipo (Tipo I, II o III).
+       - Siempre es razonable (nunca una respuesta absurda o de evasión).
+       - Siempre tiene un punto débil o límite acorde a su Tipo (Tipo I: afirma más de lo que sabe con palabras señalables;
+         Tipo II: se apoya en un supuesto sin verificar; Tipo III: sólida pero deja algo sin resolver).
+       - Sin positivismo mágico, sin negar los hechos ni minimizar emociones.
     4. "punto_debil": explicación concisa de dónde está el punto débil o límite del reappraisal inicial.
 
-    REGLAS:
+    REQUISITOS ADICIONALES PARA FASE 2 SEGÚN EL ÁNGULO:
+    - Si pide Ángulo 2 (un dato que no cierra): la situación DEBE traer al menos un dato concreto que el reappraisal inicial NO tenga en cuenta.
+    - Si pide Ángulo 3 (otra explicación): el reappraisal inicial debe apoyarse en una explicación probable de lo que pasó.
+
+    REGLAS GENERALES:
     - 5 situaciones distintas entre sí y distintas al historial.
-    - Con lectura Tipo III, nada obliga a negar hechos reales.
-    - Español argentino simple.
+    - Con lectura Tipo III, nada en la situación ni en el reappraisal obliga a negar hechos reales.
+    - Usá español argentino simple.
     - Evitá: suicidio, autolesión, violencia grave, abuso, diagnósticos médicos.
+    - NO repitas clichés como "te critican en la mesa" o "discusión por el teléfono".
     """
 
     client = _obtener_gemini_client()
