@@ -72,7 +72,7 @@ def _instrucciones_niveles(inicio):
     return '\n'.join(instrucciones)
 
 
-def _generar_batch(estado, inicio, historial=None):
+def _generar_batch(estado, inicio, historial=None, categoria="familia"):
     contexto = estado.get('perfil_contexto', {})
     genero = estado.get('genero', 'no especificado')
     edad = contexto.get('edad', estado.get('edad'))
@@ -81,9 +81,45 @@ def _generar_batch(estado, inicio, historial=None):
     familiaridad = contexto.get('familiaridad_regulacion', 'No especificado')
     historial_texto = json.dumps(historial or [], ensure_ascii=False, indent=2)
 
+    categorias = {
+        "familia": "Familia",
+        "salud": "Salud",
+        "vinculos": "Vínculos",
+        "trabajo": "Trabajo o estudio",
+    }
+
+    if categoria not in categorias:
+        raise ValueError(f"Categoría no válida: {categoria}")
+
+    nombre_categoria = categorias[categoria]
+
+    reglas_categoria = {
+        "familia": (
+            "Generar situaciones relacionadas con padres, hermanos, hijos "
+            "u otros familiares, adaptadas al perfil del usuario."
+        ),
+        "salud": (
+            "Generar situaciones cotidianas de bienestar físico, hábitos, "
+            "cansancio o preocupaciones leves de salud. Evitar diagnósticos "
+            "y enfermedades graves."
+        ),
+        "vinculos": (
+            "Generar situaciones de amistad, pareja, compañeros y relaciones "
+            "sociales, evitando asumir que el usuario tiene pareja."
+        ),
+        "trabajo": (
+            "Generar situaciones laborales o académicas según la edad "
+            "y ocupación del usuario. No asumir que trabaja o estudia."
+        ),
+    }
+
+    reglas_escenarios = reglas_categoria[categoria]
+
     prompt = f"""
-Generá EXACTAMENTE 10 ejercicios consecutivos de cognitive reappraisal.
-Categoría: Familia. Estrategia que se evalúa: Reconstrual. Tipo: opcion_multiple.
+Generá EXACTAMENTE 10 ejercicios consecutivoss de cognitive reappraisal.
+Categoría: {nombre_categoria}. Estrategia que se evalúa: Reconstrual. Tipo: opcion_multiple.
+Los 10 escenarios deben pertenecer a la categoría {nombre_categoria}.
+No generar situaciones de otras categorías.
 Cada ejercicio debe tener UNA SOLA respuesta correcta y respetar EXACTAMENTE su receta individual.
 Generá las opciones EN ORDEN FIJO: primero la correcta y luego los distractores por grupo, G1, G2, G3, G4 y G5 según la receta. No mezcles las opciones: Python las mezclará después.
 
@@ -97,28 +133,17 @@ PERFIL DEL USUARIO PARA PERSONALIZAR SITUACIONES:
 - Familiaridad con regulación emocional: Nivel {nivel_reg} ({familiaridad}).
 
 REGLAS OBLIGATORIAS DE PERSONALIZACIÓN:
-- Si vive solo/a: usar llamadas, mensajes, visitas y encuentros familiares.
-- Si vive con sus padres: usar situaciones de convivencia, rutinas y espacios compartidos.
-- Si vive con pareja: combinar familia de origen y, ocasionalmente, familia política.
-- Si vive con amigos/as o compañeros/as: usar situaciones de contacto con su familia de origen.
-- Si vive con hijos/as: incluir crianza y relaciones con sus propios padres.
-- Si no tiene hermanos: NO incluir hermanos en ninguna situación.
-- Si tiene hermanos: incluirlos en algunas situaciones, no en todas.
-- Si no está en pareja: NO mencionar pareja ni familia política.
-- Si está en pareja: incluir familia política en un máximo de 2 situaciones.
-- Adaptar los escenarios, responsabilidades y vocabulario a la edad.
-- Usar la ocupación solamente como contexto secundario.
+{reglas_escenarios}
+- Adaptar los escenarios y el vocabulario a la edad.
 - Respetar el género sin utilizar estereotipos.
 - No mencionar literalmente los datos del perfil.
 
 VARIEDAD DE SITUACIONES:
 - Los 10 escenarios deben ser distintos.
-- Repartir los vínculos entre madre, padre, hermanos si corresponde, abuelos, tíos, primos, hijos y familia política según el perfil.
-- Ningún vínculo debe protagonizar más de 3 situaciones.
 - Usar conflictos cotidianos, concretos y realistas.
 - Describir cada situación en 2 a 4 oraciones, en segunda persona.
-- Evitar clichés como críticas en la mesa o discusiones por el teléfono.
 - Usar español argentino simple y natural.
+- Evitar repetir escenarios anteriores.
 
 IMPORTANTE:
 Estas reglas personalizan solamente los escenarios.
@@ -167,8 +192,7 @@ SITUACIONES: En bandas 1-2, un hecho simple sin pistas extra; en bandas 3-4, dos
 que se matizan sin resolver la duda; en banda 5, incertidumbre real y contexto con historia.
 La intensidad emocional NUNCA aumenta más allá de la banda 5. No agregues gravedad
 artificial para subir dificultad: desde nivel 14 solo cambian cantidad/calidad de opciones.
-Diez escenarios distintos, familiares y cotidianos, sin repetir literalmente los anteriores.
-
+Diez escenarios distintos de la categoría {nombre_categoria}, sin repetir literalmente los anteriores.
 DESEMPEÑO ANTERIOR (si existe):
 {historial_texto}
 Si hubo errores, retomá el principio en escenarios NUEVOS, pero NO cambies la receta
@@ -203,6 +227,7 @@ REGLAS DE FEEDBACK:
                 "las cantidades y el ORDEN fijo de opciones: correcta en 0, luego G1, G2, G3, G4, G5."
             )
         try:
+            print(">>> INICIANDO LLAMADA A GEMINI", flush=True)
             response = client.models.generate_content(
                 model='gemini-3.5-flash-lite',
                 contents=prompt_intento,
@@ -211,6 +236,7 @@ REGLAS DE FEEDBACK:
                     'response_schema': BatchEjerciciosFamiliaIA,
                 },
             )
+            print(">>> GEMINI RESPONDIÓ", flush=True)
             batch = BatchEjerciciosFamiliaIA.model_validate_json(response.text)
             niveles = [nivel.model_dump() for nivel in batch.niveles]
             if len(niveles) != 10:
@@ -229,17 +255,26 @@ REGLAS DE FEEDBACK:
     raise ValueError(f'No se pudo generar un batch válido: {ultimo_error}')
 
 
-def generar_batch_familia_ia(estado):
-    return _generar_batch(estado, inicio=1)
+def generar_batch_familia_ia(estado, categoria="familia"):
+    return _generar_batch(
+        estado,
+        inicio=1,
+        categoria=categoria
+    )
 
 
-def generar_batch_familia_ia_adaptativo(historial, estado):
-    # La precarga se dispara tras el 7.º ejercicio de cada batch; también
-    # puede llamarse al terminar el 10.º si falló la precarga.
-    completados = len(estado.get('_historial_ia', []))
+def generar_batch_familia_ia_adaptativo(historial, estado, categoria="familia"):
+    historiales = estado.get("_historial_ia_por_categoria", {})
+    completados = len(historiales.get(categoria, []))
+
     inicio = ((completados + 3) // 10) * 10 + 1
-    return _generar_batch(estado, inicio=inicio, historial=historial)
 
+    return _generar_batch(
+        estado,
+        inicio=inicio,
+        historial=historial,
+        categoria=categoria,
+    )
 
 def validar_nivel_ia(ejercicio, numero_nivel=None, mezclar=True):
     if ejercicio['tipo'] != 'opcion_multiple':
