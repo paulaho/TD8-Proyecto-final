@@ -3,6 +3,7 @@ import json
 from typing import List, Dict, Any, Optional, Set, Tuple
 from google import genai
 from pydantic import BaseModel, Field
+import random
 
 from dre.dificultad_contraargumento import (
     configuracion_nivel,
@@ -83,6 +84,193 @@ def _obtener_gemini_client():
         _gemini_client = genai.Client()
     return _gemini_client
 
+_PERFILES_CATEGORIA = {
+    "familia": {
+        "nombre": "Familia",
+        "ambito": "el ámbito familiar (padres, hermanos, abuelos, tíos/primos, familia política)",
+        "vinculos": "madre, padre, hermano/a si corresponde, abuelos, tíos/primos, familia política si está en pareja, hijos/as si corresponde",
+    },
+    "salud": {
+        "nombre": "Salud",
+        "ambito": "la salud y el cuidado propio (hábitos, descanso, controles, comentarios de otros sobre cómo te cuidás), SIN diagnósticos ni cuadros clínicos",
+        "vinculos": "familiares, amistades, pareja, profesionales de salud, compañeros/as de actividad física",
+    },
+    "vinculos": {
+        "nombre": "Vínculos",
+        "ambito": "los vínculos sociales y afectivos (amistades, pareja, conocidos, grupos), sin centrarse en la familia de origen",
+        "vinculos": "amigos/as, pareja o ex pareja, conocidos/as, grupos de amigos, vecinos/as",
+    },
+    "trabajo": {
+        "nombre": "Trabajo o estudio",
+        "ambito": "el trabajo o el estudio (jefes/as, compañeros/as, docentes, exámenes, entregas, devoluciones, reuniones)",
+        "vinculos": "jefe/a, compañeros/as, docentes, clientes, compañeros/as de cursada",
+    },
+}
+
+
+def _perfil_categoria(categoria):
+    c = str(categoria or "familia").lower()
+    if "salud" in c:
+        return _PERFILES_CATEGORIA["salud"]
+    if any(k in c for k in ("vinc", "pareja", "amig", "social")):
+        return _PERFILES_CATEGORIA["vinculos"]
+    if any(k in c for k in ("trabaj", "estud")):
+        return _PERFILES_CATEGORIA["trabajo"]
+    return _PERFILES_CATEGORIA["familia"]
+
+_DISPARADORES = {
+    "familia": {
+        "propios": [
+            "algo que tenés que contarle a tu familia (una decisión, una noticia) y te preocupa cómo lo van a tomar",
+            "una reunión o fecha familiar que se acerca y te genera tensión o cansancio anticipado",
+            "sentir que no le dedicás suficiente tiempo a tu familia y sentirte culpable",
+            "un recuerdo o una situación pasada con tu familia que te vuelve a la cabeza y no podés soltar",
+            "una responsabilidad de la casa o del cuidado de alguien que sentís que recae en vos",
+            "una expectativa familiar sobre tu futuro (estudio, trabajo, mudanza) que sentís que no vas a cumplir",
+        ],
+        "otros": [
+            "un silencio, una demora o un gesto de un familiar que no sabés cómo interpretar",
+            "un comentario o una decisión de un familiar que te dolió o te desconcertó",
+            "una diferencia de criterio con un familiar sobre algo cotidiano",
+        ],
+    },
+    "salud": {
+        "propios": [
+            "una molestia o dolor físico que aparece y te hace preocupar (sin diagnósticos ni cuadros clínicos)",
+            "esperar el resultado de un estudio o una consulta y sentir ansiedad por lo que pueda salir",
+            "haber dejado una rutina de cuidado (ejercicio, alimentación, descanso) y sentirte culpable o sin fuerza de voluntad",
+            "una época de mal descanso o de cansancio que te hace temer que algo anda mal",
+            "ir a una consulta o a un control y ponerte nervioso/a antes",
+            "un cambio en tu cuerpo o en tu energía que notás y te inquieta",
+            "compararte con personas que parecen cuidarse mejor que vos",
+        ],
+        "otros": [
+            "un comentario de alguien sobre tu cuerpo, tu alimentación o tus hábitos",
+            "un consejo no pedido sobre tu salud de alguien cercano",
+        ],
+    },
+    "vinculos": {
+        "propios": [
+            "ver en redes fotos o historias de un plan al que no te invitaron",
+            "sentir ansiedad antes de un encuentro social, una juntada o una cita",
+            "sentirte solo/a o sin con quién hablar de lo que te pasa",
+            "compararte con personas que parecen tener más vida social o más pareja",
+            "darle vueltas a algo que dijiste o hiciste en una juntada y temer haber quedado mal",
+            "tener que decir que no a un plan o poner un límite y sentirte culpable",
+            "conocer gente nueva o entrar a un grupo y sentirte fuera de lugar",
+        ],
+        "otros": [
+            "un mensaje que queda sin responder durante mucho tiempo",
+            "un plan que alguien cancela a último momento",
+            "un comentario o una actitud de un amigo/a o de una pareja que te dejó pensando",
+        ],
+    },
+    "trabajo": {
+        "propios": [
+            "un examen que se acerca y el miedo a desaprobar",
+            "una presentación o exposición frente a otras personas (jefe/a, docentes, grupo) y la ansiedad que te genera",
+            "una entrega o tarea con poco tiempo que sentís que no vas a llegar a terminar",
+            "un error que cometiste en una tarea y la sensación de haber quedado mal",
+            "sentir que otras personas avanzan más rápido o rinden mejor que vos",
+            "esperar una respuesta importante (una nota, una entrevista, una postulación)",
+            "sobrecarga de tareas o pendientes que te hace sentir que no das abasto",
+        ],
+        "otros": [
+            "una devolución o corrección de un/a jefe/a o docente",
+            "un mail o mensaje laboral o académico que no te responden",
+            "un comentario de un/a compañero/a de trabajo o de estudio",
+        ],
+    },
+}
+
+
+def _clave_perfil(perfil):
+    return next((k for k, v in _PERFILES_CATEGORIA.items() if v is perfil), "familia")
+
+
+def _asignar_disparadores(perfil, nivel_inicial):
+    """Asigna a cada uno de los 5 niveles un tipo de disparador distinto:
+    3 situaciones sobre algo propio de la persona y 2 sobre algo que
+    hace o dice otra persona, mezcladas al azar."""
+    pool = _DISPARADORES.get(_clave_perfil(perfil), _DISPARADORES["familia"])
+    rnd = random.Random()
+    elegidos = rnd.sample(pool["propios"], 3) + rnd.sample(pool["otros"], min(2, len(pool["otros"])))
+    if len(elegidos) < 5:
+        resto = [d for d in pool["propios"] if d not in elegidos]
+        elegidos += rnd.sample(resto, 5 - len(elegidos))
+    rnd.shuffle(elegidos)
+    lineas = "\n".join(f"    - NIVEL {nivel_inicial + i}: {d}" for i, d in enumerate(elegidos))
+    return (
+        "DISPARADOR ASIGNADO A CADA SITUACIÓN (obligatorio, en este orden):\n"
+        f"{lineas}\n"
+        "    - Cada situación gira en torno a su disparador, con detalles concretos y propios de la persona. "
+        "El disparador indica el TIPO de escena: redactala con tus palabras, no copies la frase.\n"
+        "    - No hace falta que alguien le diga algo a la persona: puede ser algo que siente, que le pasa o que tiene que enfrentar.\n"
+        "    - PROHIBIDO que más de 2 de las 5 situaciones consistan en un comentario o una actitud de otra persona.\n"
+        "    - Las 5 escenas deben ser de tipos claramente distintos entre sí."
+    )
+
+
+def _bloque_personalizacion(perfil, contexto, genero, edad_str):
+    ocupacion = contexto.get("ocupacion", "No especificado")
+    base = (
+        "INFORMACIÓN PERSONALIZADA DEL USUARIO:\n"
+        f"    - Género: {genero}\n"
+        f"    - Edad: {edad_str}\n"
+        f"    - Ocupación: {ocupacion}\n"
+    )
+    if perfil is _PERFILES_CATEGORIA["familia"]:
+        return (
+            base
+            + f"    - Convivencia: {contexto.get('convivencia', 'No especificado')}\n"
+            + f"    - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}\n"
+            + f"    - Estado en pareja: {contexto.get('pareja', 'No especificado')}\n\n"
+            "    CÓMO USAR LOS DATOS PERSONALES:\n"
+            "    - Convivencia: ambientá las situaciones según con quién vive (solo/a: contacto a distancia y reuniones; "
+            "con padres: convivencia diaria; con pareja: mezclar familia de origen y política; con amigos/as: mezclar vida compartida "
+            "y familia de origen; con hijos/as: crianza y relación con sus propios padres).\n"
+            "    - Hermanos: si respondió \"No tengo hermanos\", NO generes situaciones con hermanos. Si tiene, incluilos en algunas, no en todas.\n"
+            "    - Pareja: si está en pareja, familia política en 1 situación como máximo; si no, no menciones pareja.\n"
+            "    - Ocupación: solo como trasfondo (agenda, cansancio, tiempo), nunca como tema central.\n"
+            "    - Edad y género: ajustá escenarios, vocabulario y personajes en segunda persona, sin estereotipos.\n"
+            f"    - Repartí los vínculos entre: {perfil['vinculos']}. Ningún vínculo en más de 2 de las 5 situaciones.\n"
+            "    - No nombres los datos del perfil de forma forzada o literal; que se noten orgánicamente en el escenario."
+        )
+
+    if perfil is _PERFILES_CATEGORIA["trabajo"]:
+        if ocupacion == "Estudio":
+            hint = "la persona estudia: priorizá situaciones de estudio (exámenes, cursada, trabajos prácticos, grupos de estudio)."
+        elif ocupacion == "Trabajo":
+            hint = "la persona trabaja: priorizá situaciones laborales (tareas, reuniones, jefes/as, compañeros/as, entregas)."
+        elif ocupacion == "Estudio y trabajo":
+            hint = "la persona estudia y trabaja: mezclá situaciones de estudio y laborales, y tensiones por combinar ambas."
+        else:
+            hint = "la persona no estudia ni trabaja por ahora: usá cursos, trámites, búsqueda laboral, entrevistas o proyectos propios."
+        extra_ocupacion = f"    - Ocupación: {hint}\n"
+    else:
+        extra_ocupacion = "    - Ocupación: solo como trasfondo (agenda, cansancio, tiempo), nunca como tema central.\n"
+
+    if perfil is _PERFILES_CATEGORIA["vinculos"]:
+        extra_pareja = (
+            "    - Pareja: "
+            + ("está en pareja: podés usar a su pareja en hasta 2 situaciones.\n"
+               if str(contexto.get("pareja", "")).lower().startswith("s")
+               else "NO está en pareja: no uses pareja ni ex pareja; usá amistades, conocidos y grupos.\n")
+        )
+    else:
+        extra_pareja = ""
+
+    return (
+        base
+        + "\n    CÓMO USAR LOS DATOS PERSONALES:\n"
+        f"    - La categoría es {perfil['nombre']} y el centro de TODAS las situaciones es: {perfil['ambito']}.\n"
+        "    - NO uses convivencia, hermanos ni familia para armar las escenas. Podés mencionar a un familiar en 1 de las 5 situaciones "
+        "como máximo, solo como detalle de fondo y nunca como quien causa el malestar.\n"
+        + extra_ocupacion
+        + extra_pareja
+        + "    - Edad y género: ajustá escenarios, vocabulario y personajes en segunda persona, sin estereotipos.\n"
+        "    - No nombres los datos del perfil de forma forzada o literal; que se noten orgánicamente en el escenario."
+    )
 
 # ==========================================================
 # GENERACIÓN DE BATCHES (PROGRESIVA POR NIVELES)
@@ -118,9 +306,9 @@ def _armar_especificacion_niveles(nivel_inicial: int) -> str:
     return "\n\n".join(lineas)
 
 
-def generar_batch_texto_libre(estado, nivel_inicial: int = 1):
+def generar_batch_texto_libre(estado, nivel_inicial: int = 1, categoria: str = "familia"):
     """
-    Genera 5 situaciones de la categoría Familia para el juego de Contraargumento.
+    Genera 5 situaciones para el juego de Contraargumento.
     La dificultad está estrictamente determinada por los 5 niveles consecutivos [nivel_inicial .. nivel_inicial+4].
     El perfil_contexto solo se usa para personalizar el ámbito cotidiano.
     """
@@ -128,49 +316,30 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1):
     genero = estado.get("genero", "no especificado")
     edad = estado.get("edad")
     edad_str = f"{edad} años" if edad is not None else "No especificada"
-
+    perfil_cat = _perfil_categoria(categoria)
+    nombre_cat = perfil_cat["nombre"]    
+    bloque_personal = _bloque_personalizacion(perfil_cat, contexto, genero, edad_str)
+    bloque_disparadores = _asignar_disparadores(perfil_cat, nivel_inicial)
     spec_niveles = _armar_especificacion_niveles(nivel_inicial)
 
     prompt = f"""
     Generá EXACTAMENTE 5 situaciones de regulación emocional mediante
-    cognitive reappraisal (modo Contraargumento) en la categoría Familia.
+    cognitive reappraisal (modo Contraargumento) en la categoría {nombre_cat}.
 
-    INFORMACIÓN PERSONALIZADA DEL USUARIO:
-    - Género: {genero}
-    - Edad: {edad_str}
-    - Convivencia: {contexto.get('convivencia', 'No especificado')}
-    - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
-    - Ocupación: {contexto.get('ocupacion', 'No especificado')}
-    - Estado en pareja: {contexto.get('pareja', 'No especificado')}
+    {bloque_personal}
 
-    CÓMO USAR LOS DATOS PERSONALES:
-    - Convivencia: ambientá las situaciones según con quién vive:
-      * "Solo/a": contactos a distancia (llamados, mensajes, visitas, reuniones familiares o coordinar encuentros).
-      * "Con mis padres": convivencia diaria con ellos (espacios compartidos, rutinas, comentarios cotidianos).
-      * "Con pareja": mezclar vínculos de origen con familia política cuando sume.
-      * "Con amigos/as / compañeros/as": mezclar la vida compartida con la familia de origen.
-      * "Con hijos/as": la crianza y la relación con sus propios padres.
-    - Hermanos:
-      * Si respondió "No tengo hermanos", NO generes ninguna situación con hermanos ni primos presentados como hermanos.
-      * Si tiene, incluí hermanos en algunas situaciones, no en todas.
-    - Ocupación: usala solo como trasfondo (agenda, cansancio, tiempo, cursada o trabajo), sin convertirla en el tema central.
-    - Pareja: si está en pareja, podés incluir familia política en 1 situación como máximo por batch; si no, no menciones pareja.
-    - Edad: ajustá escenarios y vocabulario a la edad (ej.: estudiante joven vs. adulto con responsabilidades).
-    - Género: usá el género indicado para los personajes en segunda persona cuando corresponda, sin estereotipos.
-
-    VARIEDAD DE VÍNCULOS Y NATURALIDAD:
-    - En cada batch, repartí los vínculos (madre, padre, hermano/a si corresponde, abuelos, tíos/primos, familia política si está en pareja, hijos/as si corresponde).
-    - Ningún vínculo debe aparecer en más de 2 de las 5 situaciones.
-    - No nombres los datos del perfil de forma forzada o literal (ej.: jamás digas "como vivís con tus padres..." o "dado que no tenés hermanos..."); que los datos se noten orgánicamente en el escenario y las interacciones.
+    {bloque_disparadores}
 
     ESPECIFICACIÓN OBLIGATORIA DE CADA UNO DE LOS 5 NIVELES (GENERAR EN ESTE ORDEN EXACTO):
     {spec_niveles}
 
     CAMPOS REQUERIDOS PARA CADA SITUACIÓN:
-    1. "situacion": descripción breve (2-4 oraciones) de una situación familiar concreta que genera malestar.
-       Usá segunda persona ("te dice", "tu madre", etc.). Específica y realista.
+    1. "situacion": descripción breve (2-4 oraciones) de una situación concreta que genera malestar y que respete 
+        el DISPARADOR asignado a ese nivel. Usá segunda persona. Puede no haber ningún diálogo ni comentario de otra 
+        persona: lo central es lo que la persona siente y piensa. Específica y realista.
     2. "lectura_negativa_implicita": la peor lectura o pensamiento automático que esa situación tiende a disparar
-       (ej.: "Seguro está enojado/a conmigo"). Ajustada al Tipo de Lectura pedido.
+       (puede ser sobre sí misma, sobre el futuro o sobre otra persona; ej.: "Seguro es algo grave", "Voy a desaprobar", 
+       "Seguro está enojado/a conmigo"). Ajustada al Tipo de Lectura pedido.
     3. "reappraisal_inicial": UNA interpretación alternativa inicial razonable que reduzca el malestar, basada en
        la estrategia Reconstrual. Debe coincidir con el Tipo de Reappraisal pedido para ese nivel.
        - Siempre es razonable (nunca una respuesta absurda o de evasión).
@@ -185,7 +354,7 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1):
 
     REGLAS GENERALES:
     - Las 5 situaciones deben ser DISTINTAS entre sí.
-    - Situaciones cotidianas reales del entorno familiar del usuario.
+    - Situaciones cotidianas reales de {perfil_cat['ambito']}, no todas basadas en lo que otra persona dice o hace.
     - Con lectura Tipo III, NADA en la situación ni en el reappraisal puede obligar a la persona a demostrar que algo real es falso.
     - Usá español argentino simple.
     - Evitá: suicidio, autolesión, violencia grave, abuso, diagnósticos médicos.
@@ -227,7 +396,7 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1):
     return situaciones
 
 
-def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial: int = 1):
+def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial: int = 1, categoria: str = "familia"):
     """
     Genera 5 situaciones adaptadas al desempeño previo en el juego de Contraargumento.
     IMPORTANTE: La dificultad está fijada estrictamente por los niveles [nivel_inicial .. nivel_inicial+4].
@@ -237,42 +406,21 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
     genero = estado.get("genero", "no especificado")
     edad = estado.get("edad")
     edad_str = f"{edad} años" if edad is not None else "No especificada"
-
+    perfil_cat = _perfil_categoria(categoria)
+    nombre_cat = perfil_cat["nombre"]
+    bloque_personal = _bloque_personalizacion(perfil_cat, contexto, genero, edad_str)
+    bloque_disparadores = _asignar_disparadores(perfil_cat, nivel_inicial)
     spec_niveles = _armar_especificacion_niveles(nivel_inicial)
 
     historial_texto_json = json.dumps(historial_texto, ensure_ascii=False, indent=2)
 
     prompt = f"""
     Generá EXACTAMENTE 5 situaciones de regulación emocional mediante
-    cognitive reappraisal (modo Contraargumento) en la categoría Familia.
+    cognitive reappraisal (modo Contraargumento) en la categoría {nombre_cat}.
 
-    INFORMACIÓN PERSONALIZADA DEL USUARIO:
-    - Género: {genero}
-    - Edad: {edad_str}
-    - Convivencia: {contexto.get('convivencia', 'No especificado')}
-    - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}
-    - Ocupación: {contexto.get('ocupacion', 'No especificado')}
-    - Estado en pareja: {contexto.get('pareja', 'No especificado')}
+    {bloque_personal}
 
-    CÓMO USAR LOS DATOS PERSONALES:
-    - Convivencia: ambientá las situaciones según con quién vive:
-      * "Solo/a": contactos a distancia (llamados, mensajes, visitas, reuniones familiares o coordinar encuentros).
-      * "Con mis padres": convivencia diaria con ellos (espacios compartidos, rutinas, comentarios cotidianos).
-      * "Con pareja": mezclar vínculos de origen con familia política cuando sume.
-      * "Con amigos/as / compañeros/as": mezclar la vida compartida con la familia de origen.
-      * "Con hijos/as": la crianza y la relación con sus propios padres.
-    - Hermanos:
-      * Si respondió "No tengo hermanos", NO generes ninguna situación con hermanos ni primos presentados como hermanos.
-      * Si tiene, incluí hermanos en algunas situaciones, no en todas.
-    - Ocupación: usala solo como trasfondo (agenda, cansancio, tiempo, cursada o trabajo), sin convertirla en el tema central.
-    - Pareja: si está en pareja, podés incluir familia política en 1 situación como máximo por batch; si no, no menciones pareja.
-    - Edad: ajustá escenarios y vocabulario a la edad (ej.: estudiante joven vs. adulto con responsabilidades).
-    - Género: usá el género indicado para los personajes en segunda persona cuando corresponda, sin estereotipos.
-
-    VARIEDAD DE VÍNCULOS Y NATURALIDAD:
-    - En cada batch, repartí los vínculos (madre, padre, hermano/a si corresponde, abuelos, tíos/primos, familia política si está en pareja, hijos/as si corresponde).
-    - Ningún vínculo debe aparecer en más de 2 de las 5 situaciones.
-    - No nombres los datos del perfil de forma forzada o literal (ej.: jamás digas "como vivís con tus padres..." o "dado que no tenés hermanos..."); que los datos se noten orgánicamente en el escenario y las interacciones.
+    {bloque_disparadores}
 
     HISTORIAL DE DESEMPEÑO PREVIO DEL USUARIO:
     {historial_texto_json}
@@ -287,9 +435,11 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
     {spec_niveles}
 
     CAMPOS REQUERIDOS PARA CADA SITUACIÓN:
-    1. "situacion": descripción breve (2-4 oraciones) de una situación familiar concreta que genera malestar.
-       Usá segunda persona ("te dice", "tu madre", etc.). Específica y realista.
-    2. "lectura_negativa_implicita": la peor lectura o pensamiento automático que esa situación tiende a disparar.
+    1. "situacion": descripción breve (2-4 oraciones) de una situación concreta de {perfil_cat['ambito']} que genera malestar
+       y que respete el DISPARADOR asignado a ese nivel. Usá segunda persona. Puede no haber ningún diálogo ni comentario de 
+       otra persona: lo central es lo que la persona siente y piensa. Específica y realista.
+    2. "lectura_negativa_implicita": la peor lectura o pensamiento automático que esa situación tiende a disparar (puede ser 
+        sobre sí misma, sobre el futuro o sobre otra persona; ej.: "Seguro es algo grave", "Voy a desaprobar", "Seguro está enojado/a conmigo").
     3. "reappraisal_inicial": UNA interpretación alternativa inicial razonable que reduzca el malestar, basada en
        Reconstrual y acorde a su Tipo (Tipo I, II o III).
        - Siempre es razonable (nunca una respuesta absurda o de evasión).
@@ -304,6 +454,7 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
 
     REGLAS GENERALES:
     - 5 situaciones distintas entre sí y distintas al historial.
+    - Situaciones cotidianas reales de {perfil_cat['ambito']}, no todas basadas en lo que otra persona dice o hace.
     - Con lectura Tipo III, nada en la situación ni en el reappraisal obliga a negar hechos reales.
     - Usá español argentino simple.
     - Evitá: suicidio, autolesión, violencia grave, abuso, diagnósticos médicos.
@@ -411,7 +562,7 @@ def evaluar_batch_texto_libre(ejercicios: List[Dict[str, Any]]) -> List[Dict[str
 
     CONTEXTO DE LA TAREA:
     Cada situación presenta:
-    1. "situacion": Hecho familiar que genera malestar.
+    1. "situacion": Hecho que genera malestar.
     2. "lectura_negativa_implicita": Pensamiento automático negativo que suele disparar.
     3. "reappraisal_inicial": Reappraisal 1 dado por la app (con su "punto_debil").
     4. "contraargumento": Objeción redactada por el usuario al Reappraisal 1.

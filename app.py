@@ -203,6 +203,8 @@ from dre.supabase_juegos import (
     obtener_progreso_juegos_supabase,
     marcar_nivel_juego_completado_supabase,
     guardar_sesion_texto_libre_supabase,
+    actualizar_sesion_texto_libre_supabase,
+    obtener_sesiones_texto_libre_supabase,
 )
 
 import flet as ft
@@ -216,7 +218,7 @@ import csv
 import io
 import urllib.parse
 import asyncio
-from datetime import datetime
+from datetime import datetime, date, timedelta, timezone
 from flet.auth.providers import GoogleOAuthProvider
 from test_inicial import mostrar_test_inicial
 
@@ -250,6 +252,20 @@ from test_inicial import mostrar_test_inicial
 # probar la técnica una sola vez en frío alcanza para habilitar el
 # trabajo sobre situaciones de verdad.
 UMBRAL_REAPPRAISAL_PROPIAS = 1
+
+# ==========================================================
+# --- CONSTANTES DE TEXTO VISIBLE (renombrar en un solo lugar) ---
+# ==========================================================
+NOMBRE_SECCION_JUEGOS = "Entrená tu mente"
+SUBTITULO_SECCION_JUEGOS = "Juegos para aprender a regular tus emociones"
+NOMBRE_JUEGO_ESCRITURA = "Escribí tu mirada"
+SUBTITULO_JUEGO_ESCRITURA = "Respondé con tus palabras a situaciones inventadas"
+NOMBRE_JUEGO_OPCIONES = "Desafíos rápidos"
+SUBTITULO_JUEGO_OPCIONES = "Elegí la mejor reinterpretación entre varias opciones"
+NOMBRE_BOTON_PROXIMO_NIVEL = "Próximo nivel"
+NOMBRE_BOTON_PROXIMO_BLOQUE = "Próximo bloque"
+SUBTITULO_BOTON_PROXIMO_BLOQUE = "5 situaciones nuevas para escribir"
+NOMBRE_PERSONALIZACION = "Mi espacio"
 
 # ==========================================================
 # "PRACTICÁ CON ESCENARIOS" — juegos de reappraisal (integración MENTO)
@@ -435,6 +451,8 @@ def main(page: ft.Page):
         "cosmetico_planta": "",    # flor elegida para las plantas en flor ("" = la de defecto)
         "cosmetico_fondo": "",     # florcita elegida para la decoración del menú ("" = la de defecto)
         "color_fondo": "",         # color de fondo de pantalla elegido ("" = COLOR_FONDO clásico)
+        "racha_actual": 0,         # días seguidos jugando (se guarda en Supabase)
+        "racha_ultimo_dia": "",    # último día (YYYY-MM-DD) en que completó un ejercicio
         "reporte_actual": {},
         "modo_local": False,       # True cuando se entra con el acceso de prueba (no toca Supabase)
         "_reportes_locales": [],   # historial en memoria, solo para el acceso de prueba
@@ -470,6 +488,9 @@ def main(page: ft.Page):
         "_tl_ejemplos": [None] * 5,     # ejemplos modelo si llegó a 3er intento
         "_tl_vio_tutorial": False,
         "_tl_batch_finalizado": False,  # flag para evitar doble guardado de sesión
+        "_tl_categoria_actual": "familia", # categoría activa del modo escritura
+        "_tl_sesion_id_actual": None,    # id de la fila en Supabase de la sesión actual
+        "_tl_bloques_locales": [],       # registro de bloques completados en modo local
     }
 
     # ==========================================================
@@ -508,6 +529,36 @@ def main(page: ft.Page):
         if len(historial) > 1:
             historial.pop()
             historial[-1]()
+
+    def salir_escritura_a_bloques(e=None):
+        # Corta la pila de navegación en el punto donde se entró al juego
+        # (la pantalla de bloques de la categoría) y la vuelve a mostrar.
+        base = estado.get("_tl_nav_base")
+        if base is not None and 1 <= base <= len(historial):
+            del historial[base:]
+        if historial:
+            historial[-1]()
+        else:
+            ir_a_menu_principal()
+
+    def confirmar_salir_escritura(e=None):
+        def _seguir(ev=None):
+            page.pop_dialog()
+
+        def _salir(ev=None):
+            page.pop_dialog()
+            salir_escritura_a_bloques()
+
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("¿Salir del bloque?"),
+                content=ft.Text("Si salís ahora, vas a perder lo que escribiste en este bloque."),
+                actions=[
+                    ft.TextButton("Seguir", on_click=_seguir),
+                    ft.TextButton("Salir", on_click=_salir),
+                ],
+            )
+        )
 
     # ------------------------------------------------------------------
     # Ajuste de género en los textos que hablan del usuario (pedido de
@@ -641,6 +692,10 @@ def main(page: ft.Page):
         page.update()
         _iniciar_latido()
 
+        pendiente = estado.pop("_racha_pendiente", None)   # <-- NUEVO
+        if pendiente:
+            mostrar_racha_extendida(pendiente)
+
     # Latido (heartbeat): en el celular, cuando la app queda en segundo
     # plano un rato (cambiás a otra app y volvés), la conexión en vivo con
     # el servidor se corta y al volver los botones quedan sin responder.
@@ -710,6 +765,8 @@ def main(page: ft.Page):
         estado["cosmetico_planta"] = usuario.get("cosmetico_planta") or ""
         estado["cosmetico_fondo"] = usuario.get("cosmetico_fondo") or ""
         estado["color_fondo"] = usuario.get("color_fondo") or ""
+        estado["racha_actual"] = usuario.get("racha_actual") or 0
+        estado["racha_ultimo_dia"] = usuario.get("racha_ultimo_dia") or ""
         page.bgcolor = estado["color_fondo"] or COLOR_FONDO
         estado["modo_local"] = local
         estado["realizo_test_inicial"] = bool(usuario.get("realizo_test_inicial")) # TEMP TEST
@@ -1039,6 +1096,8 @@ def main(page: ft.Page):
         )
 
     def cerrar_sesion(e):
+        estado["racha_actual"] = 0
+        estado["racha_ultimo_dia"] = ""
         estado["email"] = ""
         estado["usuario_id"] = None
         estado["nombre"] = ""
@@ -1316,6 +1375,66 @@ def main(page: ft.Page):
             mostrar_volver=permitir_volver and pagina == 0,
         )
 
+    # ==========================================================
+    # RACHA DIARIA
+    # ----------------------------------------------------------
+    # Se guarda solo "racha_actual" y "racha_ultimo_dia". Nada se
+    # resetea con un job: al mostrar la racha se compara el último día
+    # jugado con hoy (si pasó más de 1 día, vale 0).
+    # Argentina no tiene horario de verano, así que UTC-3 fijo alcanza
+    # (y evita que el servidor en UTC cambie el día a las 21:00).
+    # ==========================================================
+    ZONA_RACHA = timezone(timedelta(hours=-3))
+
+    def _hoy_racha():
+        return datetime.now(ZONA_RACHA).date()
+
+    def racha_vigente():
+        ultimo = estado.get("racha_ultimo_dia") or ""
+        if not ultimo:
+            return 0
+        try:
+            dias = (_hoy_racha() - date.fromisoformat(str(ultimo)[:10])).days
+        except ValueError:
+            return 0
+        return estado.get("racha_actual", 0) if dias <= 1 else 0
+
+    def jugo_hoy():
+        return str(estado.get("racha_ultimo_dia") or "")[:10] == _hoy_racha().isoformat()
+
+    def registrar_actividad_del_dia():
+        # Se llama al completar un ejercicio. Solo hace algo la PRIMERA
+        # vez en el día: suma 1, guarda y deja pendiente el aviso.
+        if jugo_hoy():
+            return
+        hoy = _hoy_racha().isoformat()
+        nueva = racha_vigente() + 1
+        estado["racha_actual"] = nueva
+        estado["racha_ultimo_dia"] = hoy
+        estado["_racha_pendiente"] = nueva
+        if not estado["modo_local"]:
+            threading.Thread(
+                target=actualizar_usuario,
+                args=(estado["usuario_id"], {"racha_actual": nueva, "racha_ultimo_dia": hoy}),
+                daemon=True,
+            ).start()
+
+    def mostrar_racha_extendida(dias):
+        if dias == 1:
+            titulo = "🔥 ¡Empezaste tu racha!"
+            texto = "Hoy es tu día 1. Volvé mañana para sumar el día 2."
+        else:
+            titulo = "🔥 ¡Racha extendida!"
+            texto = f"Llevás {dias} días seguidos. Volvé mañana para seguir sumando."
+        page.show_dialog(
+            ft.AlertDialog(
+                modal=True,
+                title=ft.Text(titulo, text_align=ft.TextAlign.CENTER),
+                content=ft.Text(texto, text_align=ft.TextAlign.CENTER),
+                actions=[ft.TextButton("Seguir", on_click=lambda _: page.pop_dialog())],
+                actions_alignment=ft.MainAxisAlignment.CENTER,
+            )
+        )
 
     def mostrar_menu_principal():
         historial.clear()
@@ -1416,7 +1535,7 @@ def main(page: ft.Page):
                 content=ft.Text(
                     "💛 Gracias por contarnos cómo venís. Los momentos como este pueden mejorar — y no hace "
                     "falta que lo atravieses solo/a: DRE está para acompañarte. El Trabajo emocional y "
-                    "Otra perspectiva son dos buenas herramientas para estos días; probalas a tu ritmo.",
+                    f"{NOMBRE_SECCION_JUEGOS} son dos buenas herramientas para estos días; probalas a tu ritmo.",
                     text_align=ft.TextAlign.CENTER,
                 ),
                 padding=15,
@@ -1467,39 +1586,86 @@ def main(page: ft.Page):
             width=ancho_campo(),
         )
 
+        racha = racha_vigente()
+        if racha == 0:
+            texto_racha = "🔥 Completá un ejercicio hoy para empezar tu racha"
+        elif jugo_hoy():
+            texto_racha = f"🔥 Racha: {racha} día{'s' if racha != 1 else ''}"
+        else:
+            texto_racha = f"🔥 Racha: {racha} día{'s' if racha != 1 else ''} · jugá hoy para no perderla"
+
+        tarjeta_racha = ft.Container(
+            content=ft.Text(texto_racha, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            padding=12,
+            border_radius=12,
+            bgcolor=COLOR_CAJA_INFO,
+            width=ancho_campo(),
+        )
+
         pantalla(
             encabezado,
             ft.Text("DRE", size=20, weight=ft.FontWeight.BOLD, color=COLOR_PRIMARIO, text_align=ft.TextAlign.CENTER),
             ft.Text("Diario de Reflexión Emocional", size=11, color=COLOR_TEXTO_SUAVE, text_align=ft.TextAlign.CENTER),
             ft.Text(f"Hola, {estado['nombre']}!", size=24, weight=ft.FontWeight.BOLD),
             ft.Text("¿Cómo querés usar este espacio hoy?", color=COLOR_TEXTO_MEDIO),
+            tarjeta_racha,                      
             tarjeta_apoyo,
             aviso_bienestar,
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-            ft.ElevatedButton(
-                "Autorreporte",
-                icon=ft.Icons.INSIGHTS,
-                on_click=lambda _: ir_a(mostrar_bienestar),
+            # Ítem principal: Entrená tu mente (más grande y destacado)
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.SPORTS_ESPORTS, color=ft.Colors.WHITE, size=32),
+                        ft.Column(
+                            [
+                                ft.Text(
+                                    NOMBRE_SECCION_JUEGOS,
+                                    color=ft.Colors.WHITE,
+                                    size=20,
+                                    weight=ft.FontWeight.BOLD,
+                                    font_family=MENTO_FUENTE,
+                                ),
+                                ft.Text(
+                                    SUBTITULO_SECCION_JUEGOS,
+                                    color=ft.Colors.with_opacity(0.88, ft.Colors.WHITE),
+                                    size=12,
+                                ),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.WHITE, size=22),
+                    ],
+                    spacing=14,
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.Padding.symmetric(horizontal=18, vertical=16),
+                border_radius=16,
+                bgcolor=MENTO_ROSA_TEXTO,
                 width=ancho_campo(),
-                height=50,
+                on_click=lambda _: ir_a(mostrar_reappraisal),
             ),
-            ft.ElevatedButton(
+            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
+            # Ítems secundarios
+            ft.Button(
                 "Trabajo emocional",
                 icon=ft.Icons.SELF_IMPROVEMENT,
                 on_click=lambda _: ir_a(mostrar_trabajo_emocional),
                 width=ancho_campo(),
                 height=50,
             ),
-            ft.ElevatedButton(
-                "Otra perspectiva",
-                icon=ft.Icons.AUTORENEW,
-                on_click=lambda _: ir_a(mostrar_reappraisal),
+            ft.Button(
+                "Autorreporte",
+                icon=ft.Icons.INSIGHTS,
+                on_click=lambda _: ir_a(mostrar_bienestar),
                 width=ancho_campo(),
                 height=50,
             ),
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             ft.OutlinedButton(
-                "Personalización",
+                NOMBRE_PERSONALIZACION,
                 icon=ft.Icons.PALETTE_OUTLINED,
                 on_click=lambda _: ir_a(mostrar_personalizacion),
                 width=ancho_campo(),
@@ -1571,9 +1737,9 @@ def main(page: ft.Page):
         if detallada:
             controles.append(
                 ft.Text(
-                    "¿En qué se diferencia de \"Otra perspectiva\"? Acá venís cuando algo te pasó de verdad y lo "
+                    f"¿En qué se diferencia de \"{NOMBRE_SECCION_JUEGOS}\"? Acá venís cuando algo te pasó de verdad y lo "
                     "desarmamos juntos, mirando qué tan cierto es ese pensamiento (la evidencia a favor y en "
-                    "contra). \"Otra perspectiva\", en cambio, es como un gimnasio: ahí entrenás la habilidad de "
+                    f"contra). \"{NOMBRE_SECCION_JUEGOS}\", en cambio, es como un gimnasio: ahí entrenás la habilidad de "
                     "cambiar de perspectiva practicando en frío, sin necesidad de estar mal en ese momento. "
                     "Las dos cosas se complementan: los pensamientos que registrás acá después también los "
                     "podés usar para practicar allá.",
@@ -1662,13 +1828,12 @@ def main(page: ft.Page):
             ir_a(_mostrar_menu_reappraisal)
 
         controles = [
-            ft.Icon(ft.Icons.AUTORENEW, size=60, color=COLOR_PRIMARIO),
-            ft.Text("Otra perspectiva", size=24, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            ft.Icon(ft.Icons.SPORTS_ESPORTS, size=60, color=MENTO_ROSA_TEXTO),
+            ft.Text(NOMBRE_SECCION_JUEGOS, size=24, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             ft.Text(
                 "Acá entrenás la habilidad de mirar una situación desde otro ángulo, para que pese menos "
                 "emocionalmente. Se practica como en un gimnasio: en frío, sin necesidad de estar "
-                "mal en ese momento. Empezás probando la técnica con una situación inventada, y enseguida "
-                "se desbloquean ejercicios sobre situaciones tuyas de verdad.",
+                "mal en ese momento. Al completar cualquier juego, se habilitan ejercicios sobre situaciones tuyas de verdad.",
                 size=18,
                 color=COLOR_TEXTO_FUERTE,
                 text_align=ft.TextAlign.CENTER,
@@ -1677,14 +1842,15 @@ def main(page: ft.Page):
         if detallada:
             controles.append(
                 ft.Text(
-                    "¿Por qué primero situaciones inventadas? Porque practicar con material que no te toca de "
-                    "cerca hace más fácil aprender la técnica — igual que en un gimnasio no arrancás con el peso "
-                    "máximo. Cada ejercicio son 4 pasos cortos: qué pensás/sentís, solo los hechos, la mirada de "
-                    "un tercero, y cómo lo vas a ver dentro de un año. ¿En qué se diferencia de \"Trabajo "
-                    "emocional\"? Allá vas cuando algo real te está pesando ahora, y lo trabajás mirando qué tan "
-                    "cierto es el pensamiento; acá venís a entrenar el cambio de perspectiva, para que te salga "
-                    "más fácil cuando lo necesites de verdad. Una vez desbloqueadas las situaciones propias, "
-                    "también vas a poder practicar directo desde un pensamiento guardado en \"Trabajo emocional\".",
+                    f"Hay dos juegos: \"{NOMBRE_JUEGO_ESCRITURA}\" (escribís tu propia reinterpretación con "
+                    "ayuda de la IA) y "
+                    f"\"{NOMBRE_JUEGO_OPCIONES}\" (elegís la mejor opción entre varias). "
+                    "Cualquiera de los dos desbloquea el trabajo con tus situaciones propias. "
+                    f"¿En qué se diferencia de \"Trabajo emocional\"? Allá vas cuando algo real te está pesando ahora "
+                    "y lo trabajás mirando qué tan cierto es el pensamiento; acá venís a entrenar el cambio de "
+                    "perspectiva para que te salga más fácil cuando lo necesites de verdad. Una vez desbloqueadas "
+                    "las situaciones propias, también vas a poder practicar directo desde un pensamiento guardado "
+                    "en \"Trabajo emocional\".",
                     size=16,
                     color=COLOR_TEXTO_MEDIO,
                     text_align=ft.TextAlign.CENTER,
@@ -1716,27 +1882,81 @@ def main(page: ft.Page):
                 ],
                 alignment=ft.MainAxisAlignment.END,
             ),
-            ft.Text("Otra perspectiva", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            ft.Text(NOMBRE_SECCION_JUEGOS, size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, font_family=MENTO_FUENTE),
             ft.Text(
-                "Ejercicios para practicar la habilidad de ver una situación desde otro ángulo.",
+                "Juegos para practicar la habilidad de ver una situación desde otro ángulo.",
                 color=COLOR_TEXTO_MEDIO,
                 text_align=ft.TextAlign.CENTER,
             ),
-            ft.ElevatedButton(
-                "Ejercicios sobre situaciones inventadas",
-                icon=ft.Icons.AUTO_STORIES,
-                on_click=lambda _: ir_a(mostrar_reappraisal_elegir_inventada),
+            # Juego 1: Escribí tu mirada (texto libre) — celeste/primario
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.EDIT_NOTE, color=ft.Colors.WHITE, size=28),
+                        ft.Column(
+                            [
+                                ft.Text(
+                                    NOMBRE_JUEGO_ESCRITURA,
+                                    color=ft.Colors.WHITE,
+                                    size=16,
+                                    weight=ft.FontWeight.BOLD,
+                                    font_family=MENTO_FUENTE,
+                                ),
+                                ft.Text(
+                                    SUBTITULO_JUEGO_ESCRITURA,
+                                    color=ft.Colors.with_opacity(0.88, ft.Colors.WHITE),
+                                    size=11,
+                                ),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.WHITE, size=20),
+                    ],
+                    spacing=12,
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.Padding.symmetric(horizontal=16, vertical=14),
+                border_radius=14,
+                bgcolor=MENTO_CELESTE,
                 width=ancho_campo(),
-                height=50,
+                on_click=lambda _: ir_a(lambda: mostrar_reappraisal_juegos_categorias(juego="escritura")),
             ),
-            ft.ElevatedButton(
-                "Practicá con escenarios",
-                icon=ft.Icons.SPORTS_ESPORTS,
-                on_click=lambda _: ir_a(mostrar_reappraisal_juegos_categorias),
-                width=ancho_campo(),
-                height=50,
+            # Juego 2: Desafíos rápidos (opción múltiple) — rosa
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.SPORTS_ESPORTS, color=ft.Colors.WHITE, size=28),
+                        ft.Column(
+                            [
+                                ft.Text(
+                                    NOMBRE_JUEGO_OPCIONES,
+                                    color=ft.Colors.WHITE,
+                                    size=16,
+                                    weight=ft.FontWeight.BOLD,
+                                    font_family=MENTO_FUENTE,
+                                ),
+                                ft.Text(
+                                    SUBTITULO_JUEGO_OPCIONES,
+                                    color=ft.Colors.with_opacity(0.88, ft.Colors.WHITE),
+                                    size=11,
+                                ),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.WHITE, size=20),
+                    ],
+                    spacing=12,
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.Padding.symmetric(horizontal=16, vertical=14),
+                border_radius=14,
                 bgcolor=MENTO_ROSA_TEXTO,
-                color=ft.Colors.WHITE,
+                width=ancho_campo(),
+                on_click=lambda _: ir_a(lambda: mostrar_reappraisal_juegos_categorias(juego="opciones")),
             ),
         ]
 
@@ -1756,9 +1976,7 @@ def main(page: ft.Page):
                     content=ft.Column(
                         [
                             ft.Text(
-                                f"Completá {UMBRAL_REAPPRAISAL_PROPIAS} ejercicio{'s' if UMBRAL_REAPPRAISAL_PROPIAS != 1 else ''} de situaciones inventadas para desbloquear situaciones propias."
-                                if UMBRAL_REAPPRAISAL_PROPIAS != 1 else
-                                "Probá la técnica con una situación inventada para desbloquear las situaciones propias.",
+                                "Jugá un nivel en cualquiera de los dos juegos para desbloquear el trabajo con tus situaciones propias.",
                                 weight=ft.FontWeight.BOLD,
                                 text_align=ft.TextAlign.CENTER,
                             ),
@@ -2090,6 +2308,7 @@ def main(page: ft.Page):
         )
 
     def marcar_nivel_juego_completado(categoria, nivel):
+        registrar_actividad_del_dia()
         if estado["modo_local"]:
             locales = estado.setdefault(
                 "_juegos_reappraisal_locales",
@@ -2116,14 +2335,19 @@ def main(page: ft.Page):
             nivel,
         )
 
-    def mostrar_reappraisal_juegos_categorias():
+    def mostrar_reappraisal_juegos_categorias(juego="opciones"):
 
         tarjetas = []
         for cat in MENTO_CATEGORIAS:
             def elegir(e, clave=cat["clave"]):
-                ir_a(
-                    lambda clave=clave: mostrar_reappraisal_juegos_niveles(clave)
-                )
+                if juego == "escritura":
+                    ir_a(
+                        lambda clave=clave: mostrar_escritura_bloques(clave)
+                    )
+                else:
+                    ir_a(
+                        lambda clave=clave: mostrar_reappraisal_juegos_niveles(clave)
+                    )
             tarjetas.append(
                 ft.Container(
                     content=ft.Row(
@@ -2141,16 +2365,22 @@ def main(page: ft.Page):
                     on_click=elegir,
                 )
             )
+
+        icono_header = ft.Icons.EDIT_NOTE if juego == "escritura" else ft.Icons.SPORTS_ESPORTS
+        color_header = MENTO_CELESTE if juego == "escritura" else MENTO_ROSA_TEXTO
+        titulo_header = NOMBRE_JUEGO_ESCRITURA if juego == "escritura" else NOMBRE_JUEGO_OPCIONES
+
         pantalla(
-            ft.Icon(ft.Icons.SPORTS_ESPORTS, size=44, color=MENTO_ROSA_TEXTO),
-            ft.Text("Practicá con escenarios", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, font_family=MENTO_FUENTE),
+            ft.Icon(icono_header, size=44, color=color_header),
+            ft.Text(titulo_header, size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, font_family=MENTO_FUENTE),
             ft.Text(
-                "Elegí un área de tu vida. En cada una hay 5 niveles cortos para entrenar distintas formas de reinterpretar una situación.",
+                "Elegí un área de tu vida para practicar.",
                 color=COLOR_TEXTO_MEDIO,
                 text_align=ft.TextAlign.CENTER,
             ),
             *tarjetas,
         )
+
 
     async def precargar_batch_ia(categoria="familia"):
 
@@ -2275,6 +2505,8 @@ def main(page: ft.Page):
 
         dato = niveles[indice_nivel]
 
+        cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave) 
+
         estado["_nivel_ia_actual"] = indice_nivel
 
         estado["_errores_nivel_ia"] = []
@@ -2283,6 +2515,19 @@ def main(page: ft.Page):
 
         seleccion = {"valor": None}
         evaluado = {"valor": False}
+
+        _prog_ini = obtener_progreso_juegos_reappraisal() or []
+        nivel_mostrado = sum(1 for p in _prog_ini if p.get("categoria") == f"{categoria_clave}_ia") + 1
+        nivel_registrado = {"valor": False}
+
+        def registrar_nivel_completado():
+            if nivel_registrado["valor"]:
+                return
+            nivel_registrado["valor"] = True
+            try:
+                marcar_nivel_juego_completado(f"{categoria_clave}_ia", nivel_mostrado)
+            except Exception as ex_m:
+                print("Error marcando nivel completado:", repr(ex_m))
 
         def elegir_opcion(i):
             def handler(e):
@@ -2349,9 +2594,10 @@ def main(page: ft.Page):
                     )
                 )
 
+
             controles = [
                 ft.Text(
-                    f"✨ NIVEL IA {indice_nivel + 1} / {len(niveles)}",
+                    f"✨ NIVEL {nivel_mostrado} — {cat['nombre']}",
                     weight=ft.FontWeight.BOLD,
                     color=MENTO_ROSA_TEXTO,
                     font_family=MENTO_FUENTE,
@@ -2424,6 +2670,10 @@ def main(page: ft.Page):
                         def siguiente_nivel(e):
 
                             guardar_resultado_ia(dato, categoria_clave)
+                            try:
+                                marcar_nivel_juego_completado(f"{categoria_clave}_ia", indice_nivel + 1)
+                            except Exception as ex_m:
+                                print("Error marcando nivel completado:", repr(ex_m))
 
                             # Cuando termina el ejercicio 7 (índice 6),
                             # generar los próximos 10 usando las 7 respuestas previas
@@ -2444,7 +2694,7 @@ def main(page: ft.Page):
 
                         controles.append(
                             ft.ElevatedButton(
-                                f"Siguiente nivel IA ({indice_nivel + 2}/{len(niveles)})",
+                                f"{NOMBRE_BOTON_PROXIMO_NIVEL} ({indice_nivel + 2}/{len(niveles)})",
                                 icon=ft.Icons.ARROW_FORWARD,
                                 on_click=siguiente_nivel,
                                 width=ancho_campo(),
@@ -2455,10 +2705,15 @@ def main(page: ft.Page):
 
                     else:
 
+                        try:
+                            marcar_nivel_juego_completado(f"{categoria_clave}_ia", indice_nivel + 1)
+                        except Exception as ex_m:
+                            print("Error marcando nivel completado:", repr(ex_m))
+
                         controles.append(
                             ft.Container(
                                 content=ft.Text(
-                                    f"🎉 Completaste los {len(niveles)} niveles IA",
+                                    f"🎉 Completaste los {len(niveles)} niveles",
                                     color=ft.Colors.WHITE,
                                     text_align=ft.TextAlign.CENTER,
                                     weight=ft.FontWeight.BOLD,
@@ -2469,7 +2724,6 @@ def main(page: ft.Page):
                                 width=ancho_campo(),
                             )
                         )
-
 
                         async def continuar_siguiente_batch(e):
 
@@ -2529,6 +2783,25 @@ def main(page: ft.Page):
                                     ),
                                 )
 
+                        controles.append(
+                            ft.ElevatedButton(
+                                "Continuar con nuevos niveles",
+                                icon=ft.Icons.ARROW_FORWARD,
+                                on_click=lambda e: page.run_task(continuar_siguiente_batch),
+                                width=ancho_campo(),
+                                bgcolor=MENTO_VERDE_OSCURO,
+                                color=ft.Colors.WHITE,
+                            )
+                        )
+                        controles.append(
+                            ft.OutlinedButton(
+                                "Volver a niveles",
+                                on_click=lambda _: ir_a(lambda: mostrar_reappraisal_juegos_niveles(categoria_clave)),
+                                width=ancho_campo(),
+                            )
+                        )
+
+
                 else:
                     controles.append(
                         ft.ElevatedButton(
@@ -2555,93 +2828,121 @@ def main(page: ft.Page):
     # MODO TEXTO LIBRE — Pre-carga y recarga de batches
     # ==========================================================
 
-    async def precargar_batches_texto_libre():
+    async def precargar_batches_texto_libre(categoria="familia"):
         """
         Genera hasta 3 batches en segundo plano con niveles consecutivos.
         Cada batch queda disponible apenas termina de generarse.
         """
-        if estado.get("_tl_batches_queue") and len(estado["_tl_batches_queue"]) >= 3:
+        queues = estado.setdefault("_tl_batches_queue_por_cat", {})
+        queue = queues.setdefault(categoria, [])
+        if len(queue) >= 3:
             return
 
-        if estado.get("_tl_batch_generando"):
+        generando = estado.setdefault("_tl_batch_generando_por_cat", {})
+        if generando.get(categoria):
             return
 
-        estado["_tl_batch_generando"] = True
+        generando[categoria] = True
 
         try:
-            print("Precargando batches de texto libre en background...")
+            print(f"Precargando batches de texto libre ({categoria}) en background...")
 
-            faltantes = 3 - len(estado.get("_tl_batches_queue", []))
+            faltantes = 3 - len(queue)
 
             for i in range(faltantes):
-                nivel_inicial = estado.get("_tl_siguiente_nivel_a_generar", 1)
-                estado["_tl_siguiente_nivel_a_generar"] = nivel_inicial + 5
+                sig_niveles = estado.setdefault("_tl_siguiente_nivel_por_cat", {})
+                nivel_inicial = sig_niveles.get(categoria, 1)
+                sig_niveles[categoria] = nivel_inicial + 5
 
-                if estado.get("_tl_historial") and i > 0:
+                historiales = estado.setdefault("_tl_historial_por_cat", {})
+                hist = historiales.get(categoria, [])
+
+                if hist and i > 0:
                     batch = await asyncio.to_thread(
                         generar_batch_texto_libre_adaptativo,
-                        estado["_tl_historial"],
+                        hist,
                         estado,
                         nivel_inicial,
+                        categoria,
                     )
                 else:
                     batch = await asyncio.to_thread(
                         generar_batch_texto_libre,
                         estado,
                         nivel_inicial,
+                        categoria,
                     )
 
                 # Agregar inmediatamente a la cola
-                estado["_tl_batches_queue"].append(batch)
+                queue.append(batch)
+
+                # Compatibilidad con cola plana si es familia
+                if categoria == "familia":
+                    estado.setdefault("_tl_batches_queue", []).append(batch)
+                    estado["_tl_siguiente_nivel_a_generar"] = sig_niveles[categoria]
 
                 print(
-                    f"Batch texto libre niveles {nivel_inicial}-{nivel_inicial + 4} disponible. "
-                    f"Total en cola: {len(estado['_tl_batches_queue'])}"
+                    f"Batch texto libre ({categoria}) niveles {nivel_inicial}-{nivel_inicial + 4} disponible. "
+                    f"Total en cola: {len(queue)}"
                 )
 
-            print("Precarga de texto libre completa.")
+            print(f"Precarga de texto libre ({categoria}) completa.")
 
         except Exception as e:
-            print("Error precargando batches texto libre:", repr(e))
+            print(f"Error precargando batches texto libre ({categoria}):", repr(e))
 
         finally:
-            estado["_tl_batch_generando"] = False
+            generando[categoria] = False
 
-    async def recargar_batches_texto_libre():
+    async def recargar_batches_texto_libre(categoria="familia"):
         """
         Genera 3 nuevos batches adaptativos en segundo plano cuando se
         dispara la lógica de recarga (al completar el 2do batch de cada grupo).
         """
-        if estado.get("_tl_batch_generando"):
+        generando = estado.setdefault("_tl_batch_generando_por_cat", {})
+        if generando.get(categoria):
             return
 
-        estado["_tl_batch_generando"] = True
+        generando[categoria] = True
         try:
-            print("Recargando 3 batches adaptativos de texto libre...")
+            print(f"Recargando 3 batches adaptativos de texto libre ({categoria})...")
             nuevos = []
+            sig_niveles = estado.setdefault("_tl_siguiente_nivel_por_cat", {})
+            historiales = estado.setdefault("_tl_historial_por_cat", {})
+            hist = historiales.get(categoria, [])
+
             for i in range(3):
-                nivel_inicial = estado.get("_tl_siguiente_nivel_a_generar", 1)
-                estado["_tl_siguiente_nivel_a_generar"] = nivel_inicial + 5
+                nivel_inicial = sig_niveles.get(categoria, 1)
+                sig_niveles[categoria] = nivel_inicial + 5
                 batch = await asyncio.to_thread(
                     generar_batch_texto_libre_adaptativo,
-                    estado.get("_tl_historial", []),
+                    hist,
                     estado,
                     nivel_inicial,
+                    categoria,
                 )
                 nuevos.append(batch)
-                print(f"  Batch adaptativo texto libre {i + 1}/3 generado (niveles {nivel_inicial}-{nivel_inicial + 4})")
-            estado["_tl_batches_queue"].extend(nuevos)
-            print(f"Recarga completa: {len(estado['_tl_batches_queue'])} batches disponibles")
+                print(f"  Batch adaptativo texto libre ({categoria}) {i + 1}/3 generado (niveles {nivel_inicial}-{nivel_inicial + 4})")
+
+            queues = estado.setdefault("_tl_batches_queue_por_cat", {})
+            queues.setdefault(categoria, []).extend(nuevos)
+
+            if categoria == "familia":
+                estado.setdefault("_tl_batches_queue", []).extend(nuevos)
+                estado["_tl_siguiente_nivel_a_generar"] = sig_niveles[categoria]
+
+            print(f"Recarga completa: {len(queues[categoria])} batches disponibles en {categoria}")
         except Exception as e:
-            print("Error recargando batches texto libre:", repr(e))
+            print(f"Error recargando batches texto libre ({categoria}):", repr(e))
         finally:
-            estado["_tl_batch_generando"] = False
+            generando[categoria] = False
+
 
     # ==========================================================
     # MODO TEXTO LIBRE — Tutorial
     # ==========================================================
 
-    def mostrar_tutorial_texto_libre():
+    def mostrar_tutorial_texto_libre(categoria=None):        
         """
         Tutorial progresivo del Modo Escritura.
         Muestra cada parte del ejemplo paso a paso.
@@ -2651,7 +2952,7 @@ def main(page: ft.Page):
 
         def continuar_al_juego(e):
             estado["_tl_vio_tutorial"] = True
-            page.run_task(_iniciar_modo_escritura)
+            page.run_task(_iniciar_modo_escritura, categoria or estado.get("_tl_categoria_actual", "familia"))
 
         def avanzar(nuevo_paso):
             sub_paso["valor"] = nuevo_paso
@@ -2665,7 +2966,7 @@ def main(page: ft.Page):
                     color=MENTO_CELESTE,
                 ),
                 ft.Text(
-                    "Modo Escritura",
+                    NOMBRE_JUEGO_ESCRITURA,
                     size=24,
                     weight=ft.FontWeight.BOLD,
                     text_align=ft.TextAlign.CENTER,
@@ -2917,11 +3218,14 @@ def main(page: ft.Page):
     # MODO TEXTO LIBRE — Entrada al juego
     # ==========================================================
 
-    async def _iniciar_modo_escritura():
+    async def _iniciar_modo_escritura(categoria="familia"):
         """
         Consume el primer batch de la cola y arranca la primera situación.
         Si no hay batches todavía, espera la precarga o genera uno nuevo.
         """
+        estado["_tl_categoria_actual"] = categoria
+        nombre_cat_display = categoria.capitalize() if isinstance(categoria, str) else "Familia"
+
         def _preparar_estado_batch(batch):
             estado["_tl_batch_actual"] = batch
             estado["_tl_contraargumentos"] = [""] * 5
@@ -2933,27 +3237,39 @@ def main(page: ft.Page):
             estado["_tl_fallas"] = [[] for _ in range(5)]
             estado["_tl_ejemplos"] = [None] * 5
             estado["_tl_batch_finalizado"] = False
+            estado["_tl_sesion_id_actual"] = None
 
-        if estado.get("_tl_batches_queue"):
-            batch = estado["_tl_batches_queue"].pop(0)
+        queues = estado.setdefault("_tl_batches_queue_por_cat", {})
+        queue = queues.setdefault(categoria, [])
+
+        # Sincronizar si es familia y hay algo en _tl_batches_queue
+        if categoria == "familia" and not queue and estado.get("_tl_batches_queue"):
+            queue.extend(estado["_tl_batches_queue"])
+            estado["_tl_batches_queue"].clear()
+
+        if queue:
+            batch = queue.pop(0)
+            if categoria == "familia" and estado.get("_tl_batches_queue"):
+                estado["_tl_batches_queue"] = queue.copy()
             _preparar_estado_batch(batch)
             mostrar_situacion_texto_libre(0)
             return
 
-        if estado.get("_tl_batch_generando"):
+        generando = estado.setdefault("_tl_batch_generando_por_cat", {})
+        if generando.get(categoria):
             pantalla(
                 ft.ProgressRing(),
                 ft.Text(
-                    "Preparando situaciones de Contraargumento...",
+                    f"Preparando situaciones de {nombre_cat_display}...",
                     text_align=ft.TextAlign.CENTER,
                 ),
                 mostrar_volver=False,
             )
-            while estado.get("_tl_batch_generando"):
+            while generando.get(categoria):
                 await asyncio.sleep(0.2)
 
-            if estado.get("_tl_batches_queue"):
-                batch = estado["_tl_batches_queue"].pop(0)
+            if queue:
+                batch = queue.pop(0)
                 _preparar_estado_batch(batch)
                 mostrar_situacion_texto_libre(0)
                 return
@@ -2961,31 +3277,38 @@ def main(page: ft.Page):
         pantalla(
             ft.ProgressRing(),
             ft.Text(
-                "Generando situaciones personalizadas de Familia...",
+                f"Generando situaciones personalizadas de {nombre_cat_display}...",
                 text_align=ft.TextAlign.CENTER,
             ),
             mostrar_volver=False,
         )
         try:
-            nivel_inicial = estado.get("_tl_siguiente_nivel_a_generar", 1)
-            estado["_tl_siguiente_nivel_a_generar"] = nivel_inicial + 5
-            if estado.get("_tl_historial"):
+            sig_niveles = estado.setdefault("_tl_siguiente_nivel_por_cat", {})
+            nivel_inicial = sig_niveles.get(categoria, 1)
+            sig_niveles[categoria] = nivel_inicial + 5
+
+            historiales = estado.setdefault("_tl_historial_por_cat", {})
+            hist = historiales.get(categoria, [])
+
+            if hist:
                 batch = await asyncio.to_thread(
                     generar_batch_texto_libre_adaptativo,
-                    estado["_tl_historial"],
+                    hist,
                     estado,
                     nivel_inicial,
+                    categoria,
                 )
             else:
                 batch = await asyncio.to_thread(
                     generar_batch_texto_libre,
                     estado,
                     nivel_inicial,
+                    categoria,
                 )
             _preparar_estado_batch(batch)
             mostrar_situacion_texto_libre(0)
         except Exception as e:
-            print("Error generando batch contraargumento:", repr(e))
+            print(f"Error generando batch contraargumento ({categoria}):", repr(e))
             pantalla(
                 ft.Icon(ft.Icons.ERROR_OUTLINE, size=50, color=ft.Colors.RED),
                 ft.Text(
@@ -2994,17 +3317,20 @@ def main(page: ft.Page):
                 ),
                 ft.Button(
                     "Reintentar",
-                    on_click=lambda _: page.run_task(_iniciar_modo_escritura),
+                    on_click=lambda _: page.run_task(_iniciar_modo_escritura, categoria),
                     width=ancho_campo(),
                     height=48,
                 ),
             )
 
-    def abrir_modo_escritura(e):
+    def abrir_modo_escritura(e=None, categoria="familia"):
+        estado["_tl_nav_base"] = len(historial)
+        estado["_tl_categoria_actual"] = categoria
         if not estado.get("_tl_vio_tutorial"):
-            ir_a(mostrar_tutorial_texto_libre)
+            ir_a(lambda: mostrar_tutorial_texto_libre(categoria))
         else:
-            page.run_task(_iniciar_modo_escritura)
+            page.run_task(_iniciar_modo_escritura, categoria)
+
 
     # ==========================================================
     # MODO TEXTO LIBRE — Fase 1: Contraargumentos
@@ -3040,9 +3366,10 @@ def main(page: ft.Page):
             if fase_num == 2:
                 subtitulo += f" · Fase 2 (Tramo {tramo_num})"
 
+            nombre_cat_actual = estado.get("_tl_categoria_actual", "familia").capitalize()
             controles = [
                 ft.Text(
-                    f"✍️ Nivel {nivel} — Familia (Situación {indice + 1} de 5)",
+                    f"✍️ Nivel {nivel} — {nombre_cat_actual} (Situación {indice + 1} de 5)",
                     weight=ft.FontWeight.BOLD,
                     color=MENTO_CELESTE,
                     font_family=MENTO_FUENTE,
@@ -3539,7 +3866,22 @@ def main(page: ft.Page):
                     )
                 )
 
-            pantalla(*controles, mostrar_volver=(indice == 0 and sub_paso["valor"] == 0))
+            controles.insert(
+                0,
+                ft.Row(
+                    [
+                        ft.IconButton(
+                            icon=ft.Icons.CLOSE,
+                            tooltip="Salir del bloque",
+                            on_click=confirmar_salir_escritura,
+                            icon_color=ft.Colors.WHITE,
+                            bgcolor=COLOR_PRIMARIO,
+                        )
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                ),
+            )
+            pantalla(*controles, mostrar_volver=False)
 
         def _set_subpaso(nuevo):
             error_msg["valor"] = ""
@@ -3566,6 +3908,7 @@ def main(page: ft.Page):
             return
 
         estado["_tl_batch_finalizado"] = True
+        registrar_actividad_del_dia()
 
         # Guardar en historial de desempeño para batches adaptativos futuros
         for i in range(5):
@@ -3587,31 +3930,82 @@ def main(page: ft.Page):
         if len(estado["_tl_historial"]) > 15:
             estado["_tl_historial"] = estado["_tl_historial"][-15:]
 
-        # Persistir en Supabase (best-effort)
+        categoria_tl = estado.get("_tl_categoria_actual", "familia")
+
+        # Persistir o actualizar en Supabase (best-effort)
         if not estado.get("modo_local"):
             try:
-                # TODO: Si la tabla sesiones_texto_libre agrega una columna de nivel máximo o nivel inicial, persistirlo como columna de primer nivel.
-                await asyncio.to_thread(
-                    guardar_sesion_texto_libre_supabase,
-                    estado["usuario_id"],
-                    estado["_tl_batch_actual"],
-                    estado["_tl_contraargumentos"],
-                    estado["_tl_nuevos_reappraisals"],
-                    estado["_tl_correcciones"],
-                    estado["_tl_emociones"],
-                    "familia",
-                )
+                ses_id = estado.get("_tl_sesion_id_actual")
+                if ses_id:
+                    await asyncio.to_thread(
+                        actualizar_sesion_texto_libre_supabase,
+                        ses_id,
+                        estado["_tl_batch_actual"],
+                        estado["_tl_contraargumentos"],
+                        estado["_tl_nuevos_reappraisals"],
+                        estado["_tl_correcciones"],
+                        estado["_tl_emociones"],
+                    )
+                else:
+                    ses_id = await asyncio.to_thread(
+                        guardar_sesion_texto_libre_supabase,
+                        estado["usuario_id"],
+                        estado["_tl_batch_actual"],
+                        estado["_tl_contraargumentos"],
+                        estado["_tl_nuevos_reappraisals"],
+                        estado["_tl_correcciones"],
+                        estado["_tl_emociones"],
+                        categoria_tl,
+                    )
+                    estado["_tl_sesion_id_actual"] = ses_id if isinstance(ses_id, (int, str)) else None
             except Exception as e_db:
-                print("Error guardando sesión en Supabase (no crítico):", repr(e_db))
+                print("Error guardando/actualizando sesión en Supabase (no crítico):", repr(e_db))
+        else:
+            # Modo local: actualizar bloque existente o crearlo
+            bloques_locales = estado.setdefault("_tl_bloques_locales", [])
+            ses_id = estado.get("_tl_sesion_id_actual")
+            bloque_existente = next((b for b in bloques_locales if b.get("id") == ses_id), None)
+            if bloque_existente:
+                bloque_existente["situaciones"] = estado["_tl_batch_actual"].copy()
+                bloque_existente["fase1_respuestas"] = estado["_tl_contraargumentos"].copy()
+                bloque_existente["fase2_respuestas"] = estado["_tl_nuevos_reappraisals"].copy()
+                bloque_existente["correcciones"] = estado["_tl_correcciones"].copy()
+                bloque_existente["emociones"] = estado["_tl_emociones"].copy()
+                bloque_existente["resultados"] = estado["_tl_resultados"].copy()
+                bloque_existente["intentos"] = estado["_tl_intentos"].copy()
+                bloque_existente["fallas"] = estado["_tl_fallas"].copy()
+            else:
+                nuevo_b = {
+                    "id": f"local-{len(bloques_locales) + 1}",
+                    "categoria": categoria_tl,
+                    "situaciones": estado["_tl_batch_actual"].copy(),
+                    "fase1_respuestas": estado["_tl_contraargumentos"].copy(),
+                    "fase2_respuestas": estado["_tl_nuevos_reappraisals"].copy(),
+                    "correcciones": estado["_tl_correcciones"].copy(),
+                    "emociones": estado["_tl_emociones"].copy(),
+                    "resultados": estado["_tl_resultados"].copy(),
+                    "intentos": estado["_tl_intentos"].copy(),
+                    "fallas": estado["_tl_fallas"].copy(),
+                }
+                bloques_locales.append(nuevo_b)
+                estado["_tl_sesion_id_actual"] = nuevo_b["id"]
 
         estado["_tl_batches_jugados"] += 1
 
         # Disparar recarga si se completa el 2do batch de un grupo de 3
         if estado["_tl_batches_jugados"] % 3 == 2:
             print(f"Trigger de recarga: {estado['_tl_batches_jugados']} batches jugados")
-            page.run_task(recargar_batches_texto_libre)
+            page.run_task(recargar_batches_texto_libre, categoria_tl)
+
 
     async def mostrar_texto_libre_evaluando():
+        # Si este bloque ya fue evaluado (por ejemplo, al volver con la flecha
+        # a la última situación y apretar Finalizar de nuevo), no re-evaluar
+        # ni guardar otra sesión: mostrar los resultados que ya existen.
+        if any(estado.get("_tl_resultados", [])):
+            mostrar_texto_libre_resultados()
+            return
+        
         """
         Pantalla de espera mientras la IA evalúa las 5 respuestas en batch.
         """
@@ -3663,6 +4057,41 @@ def main(page: ft.Page):
                 estado["_tl_resultados"][i] = correcciones[i].get("resultado", "pasa")
                 estado["_tl_fallas"][i] = correcciones[i].get("fallas_detectadas", [])
 
+            categoria_tl = estado.get("_tl_categoria_actual", "familia")
+
+            # Persistir sesión inicial al evaluar (Supabase o modo local)
+            if not estado.get("modo_local"):
+                try:
+                    ses_id = await asyncio.to_thread(
+                        guardar_sesion_texto_libre_supabase,
+                        estado["usuario_id"],
+                        estado["_tl_batch_actual"],
+                        estado["_tl_contraargumentos"],
+                        estado["_tl_nuevos_reappraisals"],
+                        estado["_tl_correcciones"],
+                        estado["_tl_emociones"],
+                        categoria_tl,
+                    )
+                    estado["_tl_sesion_id_actual"] = ses_id if isinstance(ses_id, (int, str)) else None
+                except Exception as e_db:
+                    print("Error guardando sesión inicial en Supabase (no crítico):", repr(e_db))
+            else:
+                bloques_locales = estado.setdefault("_tl_bloques_locales", [])
+                nuevo_bloque_local = {
+                    "id": f"local-{len(bloques_locales) + 1}",
+                    "categoria": categoria_tl,
+                    "situaciones": estado["_tl_batch_actual"].copy(),
+                    "fase1_respuestas": estado["_tl_contraargumentos"].copy(),
+                    "fase2_respuestas": estado["_tl_nuevos_reappraisals"].copy(),
+                    "correcciones": estado["_tl_correcciones"].copy(),
+                    "emociones": estado["_tl_emociones"].copy(),
+                    "resultados": estado["_tl_resultados"].copy(),
+                    "intentos": estado["_tl_intentos"].copy(),
+                    "fallas": estado["_tl_fallas"].copy(),
+                }
+                bloques_locales.append(nuevo_bloque_local)
+                estado["_tl_sesion_id_actual"] = nuevo_bloque_local["id"]
+
             # Si todas pasan en el primer intento, finalizamos el batch
             if all(r == "pasa" for r in estado["_tl_resultados"]):
                 await _finalizar_batch_si_resuelto()
@@ -3683,6 +4112,7 @@ def main(page: ft.Page):
                     width=ancho_campo(),
                     height=48,
                 ),
+                ft.TextButton("Salir", on_click=salir_escritura_a_bloques),
             )
 
     def mostrar_situacion_reintento(indice):
@@ -3992,6 +4422,34 @@ def main(page: ft.Page):
                     res = corr.get("resultado", "frena")
                     estado["_tl_resultados"][indice] = res
 
+                    # Actualizar sesión persistida cada vez que cambia el estado por un reintento
+                    ses_id = estado.get("_tl_sesion_id_actual")
+                    if ses_id:
+                        if not estado.get("modo_local"):
+                            try:
+                                await asyncio.to_thread(
+                                    actualizar_sesion_texto_libre_supabase,
+                                    ses_id,
+                                    estado["_tl_batch_actual"],
+                                    estado["_tl_contraargumentos"],
+                                    estado["_tl_nuevos_reappraisals"],
+                                    estado["_tl_correcciones"],
+                                    estado["_tl_emociones"],
+                                )
+                            except Exception as ex_upd:
+                                print("Error actualizando reintento en Supabase:", repr(ex_upd))
+                        else:
+                            for b in estado.get("_tl_bloques_locales", []):
+                                if b.get("id") == ses_id:
+                                    b["fase1_respuestas"] = estado["_tl_contraargumentos"].copy()
+                                    b["fase2_respuestas"] = estado["_tl_nuevos_reappraisals"].copy()
+                                    b["correcciones"] = estado["_tl_correcciones"].copy()
+                                    b["emociones"] = estado["_tl_emociones"].copy()
+                                    b["resultados"] = estado["_tl_resultados"].copy()
+                                    b["intentos"] = estado["_tl_intentos"].copy()
+                                    b["fallas"] = estado["_tl_fallas"].copy()
+                                    break
+
                     if res == "pasa":
                         await _finalizar_batch_si_resuelto()
                         mostrar_texto_libre_resultados()
@@ -4216,10 +4674,6 @@ def main(page: ft.Page):
 
             page.show_dialog(dialog)
 
-            page.dialog = dialog
-            dialog.open = True
-            page.update()
-
         items = []
         for i in range(5):
             situ = estado["_tl_batch_actual"][i]
@@ -4360,11 +4814,13 @@ def main(page: ft.Page):
                 )
             )
 
+        categoria_tl = estado.get("_tl_categoria_actual", "familia")
+
         controles_pantalla.append(
             ft.Button(
                 "Siguiente bloque →",
                 icon=ft.Icons.ARROW_FORWARD,
-                on_click=lambda _: page.run_task(_iniciar_modo_escritura) if todos_resueltos else None,
+                on_click=lambda _: page.run_task(_iniciar_modo_escritura, categoria_tl) if todos_resueltos else None,
                 disabled=not todos_resueltos,
                 width=ancho_campo(),
                 height=48,
@@ -4375,23 +4831,194 @@ def main(page: ft.Page):
 
         controles_pantalla.append(
             ft.OutlinedButton(
-                "Volver al menú",
-                on_click=lambda _: ir_a(lambda: mostrar_reappraisal_juegos_niveles("familia")),
+                "Volver a bloques",
+                on_click=salir_escritura_a_bloques,
                 width=ancho_campo(),
                 height=48,
             )
         )
 
+
         pantalla(*controles_pantalla, mostrar_volver=False)
+
+    # ==========================================================
+    # PANTALLA DE BLOQUES — ESCRITURA (modo texto libre)
+    # ==========================================================
+
+    def mostrar_escritura_bloques(categoria_clave):
+        cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
+
+        # Cargar sesiones desde Supabase o estado local
+        if estado.get("modo_local"):
+            sesiones = [
+                b for b in estado.get("_tl_bloques_locales", [])
+                if b.get("categoria") == categoria_clave
+            ]
+        else:
+            sesiones = obtener_sesiones_texto_libre_supabase(estado["usuario_id"], categoria_clave)
+            if sesiones is None:
+                pantalla(
+                    ft.Icon(ft.Icons.ERROR_OUTLINE, size=50, color=ft.Colors.RED),
+                    ft.Text("No pudimos cargar tus bloques. Revisá tu conexión e intentá de nuevo.", text_align=ft.TextAlign.CENTER),
+                )
+                return
+
+        filas = []
+        total_bloques = len(sesiones)
+
+        if total_bloques == 0:
+            filas.append(
+                ft.Container(
+                    content=ft.Text(
+                        f"Todavía no jugaste ningún bloque. Tocá '{NOMBRE_BOTON_PROXIMO_BLOQUE}' para empezar.",
+                        text_align=ft.TextAlign.CENTER,
+                        color=COLOR_TEXTO_MEDIO,
+                    ),
+                    padding=16,
+                    border_radius=12,
+                    bgcolor=COLOR_CAJA_SUAVE,
+                    width=ancho_campo(),
+                )
+            )
+        else:
+            for idx, ses in enumerate(sesiones):
+                num_bloque = idx + 1
+                situaciones = ses.get("situaciones") or []
+
+                # Calcular rango de niveles
+                niveles_situaciones = []
+                for s in situaciones:
+                    if isinstance(s, dict) and s.get("nivel"):
+                        niveles_situaciones.append(s["nivel"])
+
+                if niveles_situaciones:
+                    min_lvl = min(niveles_situaciones)
+                    max_lvl = max(niveles_situaciones)
+                    rango_txt = f"Niveles {min_lvl} a {max_lvl}"
+                else:
+                    rango_txt = f"Niveles {(num_bloque - 1) * 5 + 1} a {num_bloque * 5}"
+
+                # Estrellas: 1 llena por cada resultado "pasa"
+                correcciones = ses.get("correcciones") or []
+                estrellas_llenas = 0
+
+                # Puede estar en 'resultados' (modo local) o evaluado desde correcciones
+                if "resultados" in ses and isinstance(ses["resultados"], list):
+                    estrellas_llenas = sum(1 for r in ses["resultados"] if r == "pasa")
+                elif isinstance(correcciones, list):
+                    for c in correcciones:
+                        if isinstance(c, dict):
+                            res = c.get("resultado")
+                            fb = c.get("feedback", "")
+                            if res == "pasa" or fb.startswith("✅"):
+                                estrellas_llenas += 1
+
+                estrellas_llenas = min(5, max(0, estrellas_llenas))
+
+                estrellas_icons = []
+                for s_i in range(5):
+                    if s_i < estrellas_llenas:
+                        estrellas_icons.append(ft.Icon(ft.Icons.STAR, color=MENTO_AMARILLO, size=20))
+                    else:
+                        estrellas_icons.append(ft.Icon(ft.Icons.STAR_BORDER, color=COLOR_TEXTO_SUAVE, size=20))
+
+                filas.append(
+                    ft.Container(
+                        content=ft.Row(
+                            [
+                                ft.Container(
+                                    content=ft.Text(
+                                        str(num_bloque),
+                                        color=ft.Colors.WHITE,
+                                        weight=ft.FontWeight.BOLD,
+                                        size=18,
+                                        font_family=MENTO_FUENTE,
+                                    ),
+                                    width=44,
+                                    height=44,
+                                    border_radius=22,
+                                    bgcolor=cat["color"],
+                                    alignment=ft.Alignment.CENTER,
+                                ),
+                                ft.Column(
+                                    [
+                                        ft.Text(
+                                            f"Bloque {num_bloque}",
+                                            weight=ft.FontWeight.BOLD,
+                                            color=COLOR_TEXTO_FUERTE,
+                                            font_family=MENTO_FUENTE,
+                                        ),
+                                        ft.Text(rango_txt, size=12, color=COLOR_TEXTO_SUAVE),
+                                    ],
+                                    spacing=2,
+                                    expand=True,
+                                ),
+                                ft.Row(estrellas_icons, spacing=2),
+                            ],
+                            alignment=ft.MainAxisAlignment.START,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=12,
+                        ),
+                        padding=12,
+                        border_radius=14,
+                        bgcolor=COLOR_CAJA_SUAVE,
+                        width=ancho_campo(),
+                    )
+                )
+
+        boton_proximo_bloque = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.EDIT_NOTE, color=ft.Colors.WHITE, size=28),
+                    ft.Column(
+                        [
+                            ft.Text(
+                                NOMBRE_BOTON_PROXIMO_BLOQUE,
+                                color=ft.Colors.WHITE,
+                                weight=ft.FontWeight.BOLD,
+                                font_family=MENTO_FUENTE,
+                                size=16,
+                            ),
+                            ft.Text(
+                                SUBTITULO_BOTON_PROXIMO_BLOQUE,
+                                color=ft.Colors.with_opacity(0.88, ft.Colors.WHITE),
+                                size=11,
+                            ),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                    ft.Icon(ft.Icons.ARROW_FORWARD, color=ft.Colors.WHITE, size=22),
+                ],
+                spacing=12,
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.Padding.symmetric(horizontal=16, vertical=14),
+            border_radius=14,
+            bgcolor=MENTO_CELESTE,
+            width=ancho_campo(),
+            on_click=lambda _: abrir_modo_escritura(categoria=categoria_clave),
+        )
+
+        subtitulo_bloques = f"{total_bloques} bloque{'s' if total_bloques != 1 else ''} jugado{'s' if total_bloques != 1 else ''}"
+
+        pantalla(
+            ft.Icon(cat["icono"], size=44, color=cat["color"]),
+            ft.Text(cat["nombre"], size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, font_family=MENTO_FUENTE),
+            ft.Text(subtitulo_bloques, color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
+            *filas,
+            boton_proximo_bloque,
+        )
 
     # ==========================================================
     # MODO JUEGOS DE NIVELES — Pantalla de categoría
     # ==========================================================
 
+
     def mostrar_reappraisal_juegos_niveles(categoria_clave):
 
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
-        niveles = MENTO_NIVELES[categoria_clave]
 
         progreso = obtener_progreso_juegos_reappraisal()
         if progreso is None:
@@ -4400,160 +5027,152 @@ def main(page: ft.Page):
                 ft.Text("No pudimos cargar tu progreso. Revisá tu conexión e intentá de nuevo.", text_align=ft.TextAlign.CENTER),
             )
             return
-        completados = {p["nivel"] for p in progreso if p.get("categoria") == categoria_clave}
+
+        cat_ia_key = f"{categoria_clave}_ia"
+        niveles_ia_completados = sorted(
+            [p["nivel"] for p in progreso if p.get("categoria") == cat_ia_key]
+        )
+        total_completados = len(niveles_ia_completados)
+
+        # Historial en memoria para nombres y estrategias si están disponibles
+        historial_cat = estado.get("_historial_ia_por_categoria", {}).get(categoria_clave, [])
 
         filas = []
-        for i, nivel_data in enumerate(niveles):
-            nivel = i + 1
-            desbloqueado = nivel == 1 or (nivel - 1) in completados
-            completado = nivel in completados
-            icono = ft.Icons.STAR if completado else (ft.Icons.STAR_BORDER if desbloqueado else ft.Icons.LOCK)
-
-            def abrir(e, nivel=nivel, desbloqueado=desbloqueado):
-                if not desbloqueado:
-                    return
-                ir_a(lambda: mostrar_reappraisal_juego_nivel(categoria_clave, nivel))
-
+        if total_completados == 0:
             filas.append(
                 ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Container(
-                                content=ft.Text(str(nivel), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=18, font_family=MENTO_FUENTE),
-                                width=44,
-                                height=44,
-                                border_radius=22,
-                                bgcolor=cat["color"] if desbloqueado else COLOR_TEXTO_SUAVE,
-                                alignment=ft.Alignment.CENTER,
-                            ),
-                            ft.Column(
-                                [
-                                    ft.Text(
-                                        nivel_data["nombre"],
-                                        weight=ft.FontWeight.BOLD,
-                                        color=COLOR_TEXTO_FUERTE if desbloqueado else COLOR_TEXTO_SUAVE,
-                                        font_family=MENTO_FUENTE,
-                                    ),
-                                    ft.Text(nivel_data["estrategia"], size=12, color=COLOR_TEXTO_SUAVE),
-                                ],
-                                spacing=2,
-                                expand=True,
-                            ),
-                            ft.Icon(icono, color=MENTO_AMARILLO if completado else COLOR_TEXTO_SUAVE, size=26),
-                        ],
-                        alignment=ft.MainAxisAlignment.START,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=12,
-                    ),
-                    padding=12,
-                    border_radius=14,
-                    bgcolor=COLOR_CAJA_SUAVE if desbloqueado else ft.Colors.with_opacity(0.5, COLOR_CAJA_SUAVE),
-                    width=ancho_campo(),
-                    on_click=abrir,
-                )
-            )
-
-        if categoria_clave in ("familia", "salud", "vinculos", "trabajo"):
-
-            async def abrir_nivel_ia(e):
-
-                categoria = categoria_clave
-                batches = estado.setdefault("_niveles_ia_por_categoria", {})
-                generando = estado.setdefault(
-                    "_batch_ia_generando_por_categoria", {}
-                )
-
-                if batches.get(categoria):
-                    mostrar_reappraisal_juego_ia(categoria, 0)
-                    return
-
-                pantalla(
-                    ft.ProgressRing(),
-                    ft.Text(
-                        "Preparando tus niveles...",
+                    content=ft.Text(
+                        f"Todavía no jugaste ningún nivel. Tocá '{NOMBRE_BOTON_PROXIMO_NIVEL}' para empezar.",
                         text_align=ft.TextAlign.CENTER,
-                    ),
-                )
-                espera = 0
-                while generando.get(categoria):
-                    await asyncio.sleep(0.2)
-
-                if batches.get(categoria):
-                    mostrar_reappraisal_juego_ia(categoria, 0)
-                else:
-                    await mostrar_reappraisal_generando_ia(categoria)
-
-            filas.append(
-                ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Icon(
-                                ft.Icons.AUTO_AWESOME,
-                                color=ft.Colors.WHITE,
-                                size=26,
-                            ),
-                            ft.Text(
-                                "Nivel IA",
-                                color=ft.Colors.WHITE,
-                                weight=ft.FontWeight.BOLD,
-                                font_family=MENTO_FUENTE,
-                            ),
-                        ],
-                        alignment=ft.MainAxisAlignment.CENTER,
+                        color=COLOR_TEXTO_MEDIO,
                     ),
                     padding=16,
-                    border_radius=14,
-                    bgcolor=MENTO_ROSA_TEXTO,
+                    border_radius=12,
+                    bgcolor=COLOR_CAJA_SUAVE,
                     width=ancho_campo(),
-                    on_click=abrir_nivel_ia,
                 )
             )
+        else:
+            for idx_orden, nivel_num in enumerate(niveles_ia_completados):
+                # Nombre y estrategia desde historial si existen
+                nombre_nivel = f"Nivel {idx_orden + 1}"
+                estrategia_nivel = ""
+                if idx_orden < len(historial_cat):
+                    h_item = historial_cat[idx_orden]
+                    nombre_nivel = h_item.get("nombre") or nombre_nivel
+                    estrategia_nivel = h_item.get("estrategia") or ""
 
-            # Tarjeta: Modo Escritura (texto libre)
-            filas.append(
-                ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Icon(
-                                ft.Icons.EDIT_NOTE,
-                                color=ft.Colors.WHITE,
-                                size=26,
-                            ),
-                            ft.Column(
-                                [
-                                    ft.Text(
-                                        "Modo Escritura",
+                col_textos = [
+                    ft.Text(
+                        nombre_nivel,
+                        weight=ft.FontWeight.BOLD,
+                        color=COLOR_TEXTO_FUERTE,
+                        font_family=MENTO_FUENTE,
+                    )
+                ]
+                if estrategia_nivel:
+                    col_textos.append(
+                        ft.Text(estrategia_nivel, size=12, color=COLOR_TEXTO_SUAVE)
+                    )
+
+                filas.append(
+                    ft.Container(
+                        content=ft.Row(
+                            [
+                                ft.Container(
+                                    content=ft.Text(
+                                        str(idx_orden + 1),
                                         color=ft.Colors.WHITE,
                                         weight=ft.FontWeight.BOLD,
+                                        size=18,
                                         font_family=MENTO_FUENTE,
-                                        size=15,
                                     ),
-                                    ft.Text(
-                                        "Escribí tus propios reappraisals",
-                                        color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE),
-                                        size=11,
-                                    ),
-                                ],
-                                spacing=1,
-                            ),
-                        ],
-                        spacing=12,
-                        alignment=ft.MainAxisAlignment.CENTER,
-                    ),
-                    padding=16,
-                    border_radius=14,
-                    bgcolor=MENTO_CELESTE,
-                    width=ancho_campo(),
-                    on_click=abrir_modo_escritura,
+                                    width=44,
+                                    height=44,
+                                    border_radius=22,
+                                    bgcolor=cat["color"],
+                                    alignment=ft.Alignment.CENTER,
+                                ),
+                                ft.Column(
+                                    col_textos,
+                                    spacing=2,
+                                    expand=True,
+                                ),
+                                ft.Icon(ft.Icons.STAR, color=MENTO_AMARILLO, size=26),
+                            ],
+                            alignment=ft.MainAxisAlignment.START,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=12,
+                        ),
+                        padding=12,
+                        border_radius=14,
+                        bgcolor=COLOR_CAJA_SUAVE,
+                        width=ancho_campo(),
+                    )
                 )
+
+        async def abrir_proximo_nivel(e):
+            categoria = categoria_clave
+            batches = estado.setdefault("_niveles_ia_por_categoria", {})
+            generando = estado.setdefault(
+                "_batch_ia_generando_por_categoria", {}
             )
+
+            if batches.get(categoria):
+                mostrar_reappraisal_juego_ia(categoria, 0)
+                return
+
+            pantalla(
+                ft.ProgressRing(),
+                ft.Text(
+                    "Preparando tus niveles...",
+                    text_align=ft.TextAlign.CENTER,
+                ),
+            )
+            while generando.get(categoria):
+                await asyncio.sleep(0.2)
+
+            if batches.get(categoria):
+                mostrar_reappraisal_juego_ia(categoria, 0)
+            else:
+                await mostrar_reappraisal_generando_ia(categoria)
+
+        boton_proximo = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(
+                        ft.Icons.PLAY_ARROW,
+                        color=ft.Colors.WHITE,
+                        size=26,
+                    ),
+                    ft.Text(
+                        NOMBRE_BOTON_PROXIMO_NIVEL,
+                        color=ft.Colors.WHITE,
+                        weight=ft.FontWeight.BOLD,
+                        font_family=MENTO_FUENTE,
+                        size=16,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            ),
+            padding=16,
+            border_radius=14,
+            bgcolor=MENTO_ROSA_TEXTO,
+            width=ancho_campo(),
+            on_click=abrir_proximo_nivel,
+        )
+
+        subtitulo_niveles = f"{total_completados} nivel{'es' if total_completados != 1 else ''} jugado{'s' if total_completados != 1 else ''}"
 
         pantalla(
             ft.Icon(cat["icono"], size=44, color=cat["color"]),
             ft.Text(cat["nombre"], size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, font_family=MENTO_FUENTE),
-            ft.Text(f"{len(completados)} de {len(niveles)} niveles completados.", color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
+            ft.Text(subtitulo_niveles, color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
             *filas,
+            boton_proximo,
         )
+
 
     def mostrar_reappraisal_juego_nivel(categoria_clave, nivel):
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
@@ -6587,11 +7206,54 @@ def main(page: ft.Page):
 
         return guardar_ejercicio_reappraisal_supabase(datos)
 
+    def contar_ejercicios_juegos_completados():
+        total = 0
+        # 1) Desafíos rápidos (niveles IA completados)
+        try:
+            progreso_juegos = obtener_progreso_juegos_reappraisal()
+            if progreso_juegos:
+                total += sum(
+                    1 for p in progreso_juegos
+                    if str(p.get("categoria", "")).endswith("_ia")
+                )
+        except Exception as err:
+            print(f"[progreso] Error al contar niveles IA: {err}")
+
+        # 2) Escribí tu mirada (situaciones completadas con éxito)
+        try:
+            if estado.get("modo_local"):
+                sesiones = estado.get("_tl_bloques_locales", [])
+            else:
+                sesiones = obtener_sesiones_texto_libre_supabase(estado.get("usuario_id")) or []
+
+            for ses in sesiones:
+                correcciones = ses.get("correcciones") or []
+                resultados = ses.get("resultados")
+                if isinstance(resultados, list) and resultados:
+                    for r in resultados:
+                        r_str = str(r).strip().lower()
+                        if r_str in ("pasa", "avanzó con ejemplo", "avanzo con ejemplo"):
+                            total += 1
+                elif isinstance(correcciones, list):
+                    for c in correcciones:
+                        if isinstance(c, dict):
+                            res = str(c.get("resultado", "")).strip().lower()
+                            fb = str(c.get("feedback", "")).strip()
+                            if res in ("pasa", "avanzó con ejemplo", "avanzo con ejemplo") or fb.startswith("✅") or fb.startswith("💡"):
+                                total += 1
+                        elif isinstance(c, str):
+                            c_str = c.strip()
+                            if c_str.startswith("✅") or c_str.startswith("💡"):
+                                total += 1
+        except Exception as err:
+            print(f"[progreso] Error al contar ejercicios de texto libre: {err}")
+
+        return total
+
     def contar_inventadas_completadas():
         ejercicios = obtener_ejercicios_reappraisal()
-        if ejercicios is None:
-            return 0
-        return sum(1 for e in ejercicios if e.get("modo") == "inventada")
+        clasicas = 0 if ejercicios is None else sum(1 for e in ejercicios if e.get("modo") == "inventada")
+        return clasicas + contar_ejercicios_juegos_completados()
 
     # ==========================================================
     # JARDÍN INTERIOR + COLECCIÓN DE ENSEÑANZAS (gamificación)
@@ -6610,9 +7272,10 @@ def main(page: ft.Page):
         reportes = obtener_reportes_usuario()
         ejercicios = obtener_ejercicios_reappraisal()
         chequeos = obtener_chequeos_bienestar()
-        if reportes is None and ejercicios is None and chequeos is None:
+        if reportes is None and ejercicios is None and chequeos is None and not estado["modo_local"]:
             return None
-        return len(reportes or []) + len(ejercicios or []) + len(chequeos or [])
+        base = len(reportes or []) + len(ejercicios or []) + len(chequeos or [])
+        return base + contar_ejercicios_juegos_completados()
 
     def controles_recompensa(texto):
         # Cajita que se suma a las pantallas de cierre de cada flujo,
@@ -6736,11 +7399,12 @@ def main(page: ft.Page):
         return "🌱"
 
     def nivel_pase():
-        # 1 nivel por cada ejercicio de "Otra perspectiva" completado.
+        # 1 nivel por cada ejercicio completado (clásicos + nuevos juegos de "Entrená tu mente").
         ejercicios = obtener_ejercicios_reappraisal()
-        if ejercicios is None:
+        if ejercicios is None and not estado["modo_local"]:
             return None
-        return len(ejercicios)
+        clasicos = len(ejercicios) if ejercicios is not None else 0
+        return clasicos + contar_ejercicios_juegos_completados()
 
     def guardar_cosmetico_supabase(campo, valor):
         if estado["modo_local"]:
@@ -6799,7 +7463,7 @@ def main(page: ft.Page):
             ft.Text("La flor de esta planta", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             ft.Text(
                 f"Elegí con qué flor va a florecer \"{(tema.get('titulo') or '')[:60]}\". "
-                "Desbloqueás más flores subiendo de nivel en \"Otra perspectiva\".",
+                f"Desbloqueás más flores subiendo de nivel en '{NOMBRE_SECCION_JUEGOS}'.",
                 color=COLOR_TEXTO_MEDIO,
                 text_align=ft.TextAlign.CENTER,
             ),
@@ -6868,9 +7532,9 @@ def main(page: ft.Page):
 
         controles = [
             ft.Icon(ft.Icons.PALETTE_OUTLINED, size=50, color=COLOR_PRIMARIO),
-            ft.Text("Personalización", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            ft.Text(NOMBRE_PERSONALIZACION, size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             ft.Text(
-                "Para obtener nuevas opciones de personalización, practicá otras perspectivas.",
+                f"Para obtener nuevas opciones en {NOMBRE_PERSONALIZACION}, entrená en '{NOMBRE_SECCION_JUEGOS}'.",
                 color=COLOR_TEXTO_MEDIO,
                 text_align=ft.TextAlign.CENTER,
             ),
@@ -7863,8 +8527,8 @@ def main(page: ft.Page):
                                 height=45,
                             ),
                             ft.OutlinedButton(
-                                "Otra perspectiva",
-                                icon=ft.Icons.AUTORENEW,
+                                NOMBRE_SECCION_JUEGOS,
+                                icon=ft.Icons.SPORTS_ESPORTS,
                                 on_click=ir_a_bloque(mostrar_reappraisal),
                                 width=ancho_campo(240),
                                 height=45,

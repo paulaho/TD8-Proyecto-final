@@ -1,6 +1,6 @@
 """
 Módulo de dificultad progresiva y configuración por niveles
-para el juego de Contraargumento (Categoría Familia).
+para el juego de Contraargumento (todas las categorías: Familia, Salud, Vínculos y Trabajo o estudio).
 
 Python puro, sin dependencias de Flet ni de Gemini.
 """
@@ -123,11 +123,14 @@ CONFIGURACION_BANDAS: Dict[int, Dict[str, Any]] = {
         "intensidad": "leve",
         "enfoque": "puntual",
         "descripcion_situacion": (
-            "Tipo A (puntual): un episodio aislado con poca carga en el ámbito familiar "
-            "(ej.: un familiar no contesta un mensaje, se olvida de algo, no te invita a un plan menor)."
+            "Tipo A (puntual): un episodio puntual con poca carga: algo que pasó una vez, "
+            "una molestia pasajera o un contratiempo menor, dentro del ámbito de la categoría."
         ),
         "tipo_lectura": "Tipo I",
-        "descripcion_lectura": "Tipo I (exagerada, sin base): nada en la situación la sostiene; es la mente rellenando un vacío con lo peor.",
+        "descripcion_lectura": (
+            "Tipo I (exagerada, sin base): nada en la situación la sostiene; es la mente rellenando un vacío con lo peor. "
+            "Puede ser sobre sí misma, sobre el futuro o sobre lo que piensa otra persona."
+        ),
         "tipo_reappraisal": "Tipo I",
         "descripcion_reappraisal": (
             "Tipo I (punto débil visible): razonable pero afirma más de lo que se sabe. "
@@ -146,7 +149,7 @@ CONFIGURACION_BANDAS: Dict[int, Dict[str, Any]] = {
         "tipo_situacion": "Tipo A",
         "intensidad": "leve-moderada",
         "enfoque": "puntual",
-        "descripcion_situacion": "Tipo A (puntual): un episodio aislado con poca carga en el ámbito familiar.",
+        "descripcion_situacion": "Tipo A (puntual): un episodio puntual con poca carga, dentro del ámbito de la categoría.",
         "tipo_lectura": "Tipo I",
         "descripcion_lectura": "Tipo I (exagerada, sin base): nada en la situación la sostiene.",
         "tipo_reappraisal": "Tipo I",
@@ -163,10 +166,10 @@ CONFIGURACION_BANDAS: Dict[int, Dict[str, Any]] = {
         "banda": 3,
         "tipo_situacion": "Tipo B",
         "intensidad": "moderada",
-        "enfoque": "patrón",
+        "enfoque": "patrón o algo importante",
         "descripcion_situacion": (
-            "Tipo B (patrón / relación): algo que se repite o que toca una relación cercana, "
-            "con algún dato concreto en la situación."
+            "Tipo B (patrón / importancia personal): algo que se repite o que toca algo importante para la persona "
+            "(un hábito, un vínculo, un objetivo), con algún dato concreto en la situación."
         ),
         "tipo_lectura": "Tipo II",
         "descripcion_lectura": (
@@ -190,8 +193,8 @@ CONFIGURACION_BANDAS: Dict[int, Dict[str, Any]] = {
         "banda": 4,
         "tipo_situacion": "Tipo B",
         "intensidad": "moderada-alta",
-        "enfoque": "relación",
-        "descripcion_situacion": "Tipo B (patrón / relación): toca una relación familiar importante con datos concretos.",
+        "enfoque": "algo importante para la persona",
+        "descripcion_situacion": "Tipo B (patrón / importancia personal): toca algo importante para la persona, con datos concretos.",
         "tipo_lectura": "Tipo II",
         "descripcion_lectura": "Tipo II (con base parcial).",
         "tipo_reappraisal": "Tipo II",
@@ -208,9 +211,9 @@ CONFIGURACION_BANDAS: Dict[int, Dict[str, Any]] = {
         "banda": 5,
         "tipo_situacion": "Tipo C",
         "intensidad": "alta",
-        "enfoque": "relación",
+        "enfoque": "algo muy importante para la persona",
         "descripcion_situacion": (
-            "Tipo C (alta, relación): situación intensa, con una relación importante y con un dato real "
+            "Tipo C (alta): situación intensa sobre algo muy importante para la persona, con un dato real "
             "que sostiene en parte la lectura negativa."
         ),
         "tipo_lectura": "Tipo III",
@@ -274,4 +277,3 @@ def configuracion_nivel(nivel: int) -> Dict[str, Any]:
         "consigna_paso_c": consigna_paso_c,
         "consigna_paso_d": consigna_paso_d,
     }
-
