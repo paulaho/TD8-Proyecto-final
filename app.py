@@ -207,6 +207,17 @@ from dre.supabase_juegos import (
     obtener_sesiones_texto_libre_supabase,
 )
 
+from dre.meditacion import (
+    obtener_practicas,
+    obtener_practica,
+    obtener_sesion,
+)
+from dre.supabase_meditaciones import (
+    guardar_sesion_meditacion_supabase,
+    obtener_sesiones_meditacion_supabase,
+)
+import flet_audio as fta
+
 import flet as ft
 import requests
 import os
@@ -266,6 +277,8 @@ NOMBRE_BOTON_PROXIMO_NIVEL = "Próximo nivel"
 NOMBRE_BOTON_PROXIMO_BLOQUE = "Próximo bloque"
 SUBTITULO_BOTON_PROXIMO_BLOQUE = "5 situaciones nuevas para escribir"
 NOMBRE_PERSONALIZACION = "Mi espacio"
+NOMBRE_SECCION_MEDITACION = "Meditación"
+SUBTITULO_SECCION_MEDITACION = "Prácticas guiadas para calmar y enfocar tu mente"
 
 # ==========================================================
 # "PRACTICÁ CON ESCENARIOS" — juegos de reappraisal (integración MENTO)
@@ -496,6 +509,39 @@ def main(page: ft.Page):
     # ==========================================================
     # NAVEGACIÓN (mismo patrón que la app de Encuesta)
     # ==========================================================
+    _meditacion_estado = {
+        "audio_control": None,
+        "tarea_reproductor": None,
+        "cancelado": False,
+        "pausado": False,
+        "en_silencio": False,
+        "evento_completado": None,
+        "evento_reanudar": None,
+        "audio_iniciado": False,
+    }
+
+    async def _detener_audio_meditacion():
+        _meditacion_estado["cancelado"] = True
+        if _meditacion_estado.get("evento_reanudar"):
+            _meditacion_estado["evento_reanudar"].set()
+        if _meditacion_estado.get("evento_completado"):
+            _meditacion_estado["evento_completado"].set()
+        tarea = _meditacion_estado.get("tarea_reproductor")
+        if tarea and not tarea.done():
+            tarea.cancel()
+        audio = _meditacion_estado.get("audio_control")
+        if audio:
+            try:
+                await audio.release()
+            except Exception:
+                pass
+            try:
+                if audio in page.services:
+                    page.services.remove(audio)
+            except Exception:
+                pass
+            _meditacion_estado["audio_control"] = None
+
     historial = []
 
     def _clave_borrador():
@@ -526,6 +572,7 @@ def main(page: ft.Page):
         page.run_task(_guardar_borrador)
 
     def volver(e=None):
+        page.run_task(_detener_audio_meditacion)
         if len(historial) > 1:
             historial.pop()
             historial[-1]()
@@ -1096,6 +1143,7 @@ def main(page: ft.Page):
         )
 
     def cerrar_sesion(e):
+        page.run_task(_detener_audio_meditacion)
         estado["racha_actual"] = 0
         estado["racha_ultimo_dia"] = ""
         estado["email"] = ""
@@ -1648,6 +1696,42 @@ def main(page: ft.Page):
                 on_click=lambda _: ir_a(mostrar_reappraisal),
             ),
             ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
+            # Ítem destacado: Meditación
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.SPA, color=ft.Colors.WHITE, size=32),
+                        ft.Column(
+                            [
+                                ft.Text(
+                                    NOMBRE_SECCION_MEDITACION,
+                                    color=ft.Colors.WHITE,
+                                    size=20,
+                                    weight=ft.FontWeight.BOLD,
+                                    font_family=MENTO_FUENTE,
+                                ),
+                                ft.Text(
+                                    SUBTITULO_SECCION_MEDITACION,
+                                    color=ft.Colors.with_opacity(0.88, ft.Colors.WHITE),
+                                    size=12,
+                                ),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.WHITE, size=22),
+                    ],
+                    spacing=14,
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.Padding.symmetric(horizontal=18, vertical=16),
+                border_radius=16,
+                bgcolor=COLOR_PRIMARIO,
+                width=ancho_campo(),
+                on_click=lambda _: ir_a(mostrar_menu_meditacion),
+            ),
+            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
             # Ítems secundarios
             ft.Button(
                 "Trabajo emocional",
@@ -1694,6 +1778,567 @@ def main(page: ft.Page):
         )
 
     # ==========================================================
+    # ==========================================================
+    # MEDITACIÓN (prácticas guiadas)
+    # ==========================================================
+    def mostrar_menu_meditacion():
+        page.run_task(_detener_audio_meditacion)
+
+        practicas = obtener_practicas()
+        controles_practicas = []
+
+        for p in practicas:
+            sesiones_controles = []
+            for s in p.get("sesiones", []):
+                num_s = s["numero"]
+                tit_s = s["titulo"]
+                desc_s = s.get("descripcion", "")
+
+                sesiones_controles.append(
+                    ft.Container(
+                        content=ft.Row(
+                            [
+                                ft.Icon(ft.Icons.PLAY_CIRCLE_FILL, color=COLOR_PRIMARIO, size=28),
+                                ft.Column(
+                                    [
+                                        ft.Text(f"Sesión {num_s}: {tit_s}", weight=ft.FontWeight.BOLD, size=15),
+                                        ft.Text(desc_s, size=12, color=COLOR_TEXTO_MEDIO) if desc_s else ft.Container(),
+                                    ],
+                                    spacing=2,
+                                    expand=True,
+                                ),
+                                ft.Icon(ft.Icons.CHEVRON_RIGHT, color=COLOR_TEXTO_SUAVE, size=20),
+                            ],
+                            alignment=ft.MainAxisAlignment.START,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=12,
+                        ),
+                        padding=12,
+                        border_radius=12,
+                        bgcolor=COLOR_CAJA_SUAVE,
+                        width=ancho_campo(),
+                        on_click=lambda _, p_clave=p["clave"], s_num=num_s: ir_a(
+                            lambda: mostrar_preparacion_sesion(p_clave, s_num)
+                        ),
+                    )
+                )
+
+            controles_practicas.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.SPA, color=COLOR_PRIMARIO, size=26),
+                                    ft.Text(p["nombre"], size=18, weight=ft.FontWeight.BOLD, color=COLOR_TEXTO_FUERTE),
+                                ],
+                                spacing=8,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.Text(p.get("descripcion", ""), size=13, color=COLOR_TEXTO_MEDIO),
+                            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
+                            *sesiones_controles,
+                        ],
+                        spacing=8,
+                    ),
+                    padding=16,
+                    border_radius=16,
+                    bgcolor=COLOR_CAJA_INFO,
+                    width=ancho_campo(),
+                )
+            )
+
+        pantalla(
+            ft.Icon(ft.Icons.SPA, size=48, color=COLOR_PRIMARIO),
+            ft.Text(NOMBRE_SECCION_MEDITACION, size=24, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, font_family=MENTO_FUENTE),
+            ft.Text(
+                "Prácticas guiadas para calmar y enfocar tu mente a través de la atención y la respiración.",
+                size=14,
+                color=COLOR_TEXTO_MEDIO,
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+            *controles_practicas,
+            ft.Divider(height=14, color=ft.Colors.TRANSPARENT),
+            ft.ElevatedButton(
+                "Volver al menú principal",
+                icon=ft.Icons.ARROW_BACK,
+                on_click=lambda _: ir_a_menu_principal(),
+                width=ancho_campo(),
+                height=48,
+            ),
+            ft.TextButton(
+                "Necesito ayuda ahora",
+                icon=ft.Icons.PHONE_IN_TALK,
+                on_click=lambda _: ir_a(mostrar_paso_crisis_recursos),
+                style=ft.ButtonStyle(color=ft.Colors.RED_700),
+            ),
+            mostrar_volver=True,
+        )
+
+    def mostrar_preparacion_sesion(practica_clave, sesion_num):
+        page.run_task(_detener_audio_meditacion)
+
+        practica = obtener_practica(practica_clave)
+        sesion = obtener_sesion(practica_clave, sesion_num)
+        if not practica or not sesion:
+            ir_a(mostrar_menu_meditacion)
+            return
+
+        pantalla(
+            ft.Icon(ft.Icons.SELF_IMPROVEMENT, size=52, color=COLOR_PRIMARIO),
+            ft.Text(practica["nombre"], size=16, color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
+            ft.Text(
+                f"Sesión {sesion['numero']}: {sesion['titulo']}",
+                size=22,
+                weight=ft.FontWeight.BOLD,
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text("¿Qué vamos a entrenar?", weight=ft.FontWeight.BOLD, size=14, color=COLOR_TEXTO_FUERTE),
+                        ft.Text(
+                            "Cultivar una actitud de buena voluntad y cuidado hacia uno mismo es una habilidad que se entrena. "
+                            "No se trata de forzar una emoción o sentir algo mágico, sino de orientar la mente con una intención clara.",
+                            size=13,
+                            color=COLOR_TEXTO_MEDIO,
+                        ),
+                    ],
+                    spacing=6,
+                ),
+                padding=16,
+                border_radius=12,
+                bgcolor=COLOR_CAJA_INFO,
+                width=ancho_campo(),
+            ),
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.VOLUME_UP_OUTLINED, size=22, color=COLOR_TEXTO_MEDIO),
+                        ft.Text(
+                            "Buscá un lugar tranquilo donde puedas estar cómodo/a y sin interrupciones unos minutos.",
+                            size=13,
+                            color=COLOR_TEXTO_MEDIO,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=10,
+                ),
+                padding=14,
+                border_radius=12,
+                bgcolor=COLOR_CAJA_SUAVE,
+                width=ancho_campo(),
+            ),
+            ft.Divider(height=14, color=ft.Colors.TRANSPARENT),
+            ft.ElevatedButton(
+                "Comenzar",
+                icon=ft.Icons.PLAY_ARROW,
+                on_click=lambda _: ir_a(lambda: mostrar_reproductor_meditacion(practica_clave, sesion_num)),
+                width=ancho_campo(),
+                height=50,
+                bgcolor=COLOR_PRIMARIO,
+                color=ft.Colors.WHITE,
+            ),
+            ft.TextButton(
+                "Necesito ayuda ahora",
+                icon=ft.Icons.PHONE_IN_TALK,
+                on_click=lambda _: ir_a(mostrar_paso_crisis_recursos),
+                style=ft.ButtonStyle(color=ft.Colors.RED_700),
+            ),
+            mostrar_volver=True,
+        )
+
+    def mostrar_reproductor_meditacion(practica_clave, sesion_num):
+        practica = obtener_practica(practica_clave)
+        sesion = obtener_sesion(practica_clave, sesion_num)
+        if not practica or not sesion:
+            ir_a(mostrar_menu_meditacion)
+            return
+
+        fragmentos = sesion.get("fragmentos", [])
+        if not fragmentos:
+            ir_a(mostrar_menu_meditacion)
+            return
+
+        # Limpiar cualquier estado previo
+        page.run_task(_detener_audio_meditacion)
+
+        _meditacion_estado["cancelado"] = False
+        _meditacion_estado["pausado"] = False
+        _meditacion_estado["en_silencio"] = False
+        _meditacion_estado["audio_iniciado"] = False
+        _meditacion_estado["evento_completado"] = asyncio.Event()
+        _meditacion_estado["evento_reanudar"] = asyncio.Event()
+        _meditacion_estado["evento_reanudar"].set()
+
+        # Controles visuales
+        texto_progreso = ft.Text(
+            f"Fragmento 1 de {len(fragmentos)}",
+            size=13,
+            color=COLOR_TEXTO_MEDIO,
+            weight=ft.FontWeight.W_500,
+            text_align=ft.TextAlign.CENTER,
+        )
+        barra_progreso = ft.ProgressBar(
+            value=1.0 / len(fragmentos),
+            bgcolor=COLOR_CAJA_SUAVE,
+            color=COLOR_PRIMARIO,
+            width=ancho_campo(),
+        )
+        texto_fragmento = ft.Text(
+            fragmentos[0]["texto"],
+            size=16,
+            color=COLOR_TEXTO_FUERTE,
+            text_align=ft.TextAlign.CENTER,
+            weight=ft.FontWeight.W_500,
+        )
+        caja_texto = ft.Container(
+            content=texto_fragmento,
+            padding=22,
+            border_radius=16,
+            bgcolor=COLOR_CAJA_INFO,
+            width=ancho_campo(),
+            alignment=ft.Alignment.CENTER,
+        )
+        estado_label = ft.Text(
+            "Iniciando...",
+            size=13,
+            color=COLOR_TEXTO_SUAVE,
+            italic=True,
+            text_align=ft.TextAlign.CENTER,
+        )
+
+        boton_fallback_play = ft.Button(
+            "▶ Continuar audio",
+            visible=False,
+            bgcolor=MENTO_NARANJA,
+            color=ft.Colors.WHITE,
+            width=ancho_campo(),
+            height=44,
+        )
+        boton_saltar = ft.TextButton(
+            "Continuar al siguiente fragmento →",
+            visible=False,
+        )
+        texto_aviso = ft.Text(
+            "",
+            size=12,
+            color=ft.Colors.RED_700,
+            text_align=ft.TextAlign.CENTER,
+            visible=False,
+        )
+
+        async def alternar_pausa(e=None):
+            if _meditacion_estado["pausado"]:
+                _meditacion_estado["pausado"] = False
+                boton_pausa.icon = ft.Icons.PAUSE
+                boton_pausa.text = "Pausar"
+                _meditacion_estado["evento_reanudar"].set()
+                if not _meditacion_estado["en_silencio"]:
+                    estado_label.value = "Reproduciendo audio..."
+                    if _meditacion_estado.get("audio_control"):
+                        try:
+                            await _meditacion_estado["audio_control"].resume()
+                        except Exception as ex_res:
+                            print("Error al reanudar:", ex_res)
+                else:
+                    estado_label.value = "Momento de silencio y reflexión..."
+                page.update()
+            else:
+                _meditacion_estado["pausado"] = True
+                boton_pausa.icon = ft.Icons.PLAY_ARROW
+                boton_pausa.text = "Reanudar"
+                _meditacion_estado["evento_reanudar"].clear()
+                if not _meditacion_estado["en_silencio"]:
+                    estado_label.value = "Pausado"
+                    if _meditacion_estado.get("audio_control"):
+                        try:
+                            await _meditacion_estado["audio_control"].pause()
+                        except Exception as ex_pau:
+                            print("Error al pausar:", ex_pau)
+                else:
+                    estado_label.value = "Pausado (en silencio)"
+                page.update()
+
+        async def terminar_sesion(e=None):
+            await _detener_audio_meditacion()
+            ir_a(mostrar_menu_meditacion)
+
+        async def forzar_play(e=None):
+            if _meditacion_estado.get("audio_control"):
+                try:
+                    await _meditacion_estado["audio_control"].play()
+                    boton_fallback_play.visible = False
+                    page.update()
+                except Exception as ex_f:
+                    print("Error forzando play:", ex_f)
+
+        def saltar_fragmento(e=None):
+            if _meditacion_estado.get("evento_completado"):
+                _meditacion_estado["evento_completado"].set()
+
+        boton_fallback_play.on_click = lambda _: page.run_task(forzar_play)
+        boton_saltar.on_click = saltar_fragmento
+
+        boton_pausa = ft.Button(
+            "Pausar",
+            icon=ft.Icons.PAUSE,
+            on_click=lambda _: page.run_task(alternar_pausa),
+            bgcolor=COLOR_PRIMARIO,
+            color=ft.Colors.WHITE,
+            width=ancho_campo(170),
+            height=48,
+        )
+        boton_terminar = ft.OutlinedButton(
+            "Terminar",
+            icon=ft.Icons.STOP,
+            on_click=lambda _: page.run_task(terminar_sesion),
+            width=ancho_campo(140),
+            height=48,
+        )
+
+        def on_audio_state(e):
+            st = getattr(e, "state", None)
+            st_val = getattr(st, "value", str(st)).lower()
+            if st_val == "playing":
+                _meditacion_estado["audio_iniciado"] = True
+                boton_fallback_play.visible = False
+                texto_aviso.visible = False
+                boton_saltar.visible = False
+                estado_label.value = "Reproduciendo audio..."
+                page.update()
+            elif st_val == "completed":
+                if _meditacion_estado.get("evento_completado"):
+                    _meditacion_estado["evento_completado"].set()
+
+        audio_control = fta.Audio(
+            src="",
+            autoplay=False,
+            release_mode=fta.ReleaseMode.STOP,
+            on_state_change=on_audio_state,
+        )
+        page.services.append(audio_control)
+        page.update()
+        _meditacion_estado["audio_control"] = audio_control
+
+        async def ciclo_reproduccion():
+            for idx in range(len(fragmentos)):
+                if _meditacion_estado["cancelado"]:
+                    return
+
+                frag = fragmentos[idx]
+
+                # Actualizar UI para el fragmento actual
+                texto_fragmento.value = frag["texto"]
+                texto_progreso.value = f"Fragmento {idx + 1} de {len(fragmentos)}"
+                barra_progreso.value = (idx + 1) / len(fragmentos)
+                estado_label.value = "Cargando audio..."
+                boton_fallback_play.visible = False
+                boton_saltar.visible = False
+                texto_aviso.visible = False
+                _meditacion_estado["audio_iniciado"] = False
+                _meditacion_estado["evento_completado"].clear()
+                page.update()
+
+                # Cargar y reproducir audio
+                ruta_audio = "/" + frag["audio"].lstrip("/")
+                audio_control.src = ruta_audio
+                audio_control.update()
+                await asyncio.sleep(0.05)
+
+                try:
+                    await audio_control.play(0)
+                except Exception as ex_play:
+                    print(f"Error al reproducir audio {idx + 1}: {ex_play}")
+                    boton_fallback_play.visible = True
+                    page.update()
+
+                # Esperar a que termine de sonar el audio
+                tiempo_esperado = 0.0
+                while not _meditacion_estado["evento_completado"].is_set() and not _meditacion_estado["cancelado"]:
+                    if _meditacion_estado["pausado"]:
+                        estado_label.value = "Pausado"
+                        page.update()
+                        await _meditacion_estado["evento_reanudar"].wait()
+                        if _meditacion_estado["cancelado"]:
+                            return
+                        estado_label.value = "Reproduciendo audio..."
+                        page.update()
+
+                    try:
+                        await asyncio.wait_for(_meditacion_estado["evento_completado"].wait(), timeout=0.5)
+                        break
+                    except asyncio.TimeoutError:
+                        tiempo_esperado += 0.5
+                        # Fallback de autoplay para celulares: si pasaron 3s sin sonar
+                        if tiempo_esperado >= 3.5 and not _meditacion_estado["audio_iniciado"]:
+                            if not boton_fallback_play.visible:
+                                boton_fallback_play.visible = True
+                                texto_aviso.value = "Si el navegador bloqueó el audio, tocá Continuar:"
+                                texto_aviso.visible = True
+                                page.update()
+                        # Timeout generoso de 120s para no colgarse
+                        if tiempo_esperado >= 120.0:
+                            texto_aviso.value = "El audio tardó más de lo esperado."
+                            texto_aviso.visible = True
+                            boton_saltar.visible = True
+                            page.update()
+                            break
+
+                if _meditacion_estado["cancelado"]:
+                    return
+
+                # Si es el último fragmento, no hay silencio posterior: va directo al final
+                if idx == len(fragmentos) - 1:
+                    await _detener_audio_meditacion()
+                    ir_a(lambda: mostrar_final_meditacion(practica_clave, sesion_num))
+                    return
+
+                # Silencio posterior
+                silencio = frag.get("silencio_seg", 0)
+                if silencio > 0:
+                    _meditacion_estado["en_silencio"] = True
+                    estado_label.value = "Momento de silencio y reflexión..."
+                    boton_fallback_play.visible = False
+                    texto_aviso.visible = False
+                    boton_saltar.visible = False
+                    page.update()
+
+                    restante = float(silencio)
+                    while restante > 0 and not _meditacion_estado["cancelado"]:
+                        if _meditacion_estado["pausado"]:
+                            estado_label.value = "Pausado (en silencio)"
+                            page.update()
+                            await _meditacion_estado["evento_reanudar"].wait()
+                            if _meditacion_estado["cancelado"]:
+                                return
+                            estado_label.value = "Momento de silencio y reflexión..."
+                            page.update()
+
+                        await asyncio.sleep(0.2)
+                        restante -= 0.2
+
+                    _meditacion_estado["en_silencio"] = False
+
+            if not _meditacion_estado["cancelado"]:
+                await _detener_audio_meditacion()
+                ir_a(lambda: mostrar_final_meditacion(practica_clave, sesion_num))
+
+        _meditacion_estado["tarea_reproductor"] = page.run_task(ciclo_reproduccion)
+
+        encabezado_reproductor = ft.Row(
+            [
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    tooltip="Terminar sesión",
+                    on_click=lambda _: page.run_task(terminar_sesion),
+                    icon_color=ft.Colors.WHITE,
+                    bgcolor=COLOR_PRIMARIO,
+                ),
+                ft.Text(
+                    f"{practica['nombre']} · Sesión {sesion['numero']}",
+                    size=16,
+                    weight=ft.FontWeight.BOLD,
+                    color=COLOR_TEXTO_FUERTE,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.START,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=10,
+        )
+
+        pantalla(
+            encabezado_reproductor,
+            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
+            texto_progreso,
+            barra_progreso,
+            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+            caja_texto,
+            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
+            estado_label,
+            texto_aviso,
+            boton_fallback_play,
+            boton_saltar,
+            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+            ft.Row(
+                [
+                    boton_pausa,
+                    boton_terminar,
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+            ),
+            mostrar_volver=False,
+        )
+
+    def mostrar_final_meditacion(practica_clave, sesion_num):
+        page.run_task(_detener_audio_meditacion)
+
+        if not estado.get("modo_local") and estado.get("usuario_id"):
+            def _guardar_en_bd():
+                guardar_sesion_meditacion_supabase(
+                    estado["usuario_id"],
+                    practica_clave,
+                    sesion_num,
+                )
+            page.run_task(lambda: asyncio.to_thread(_guardar_en_bd))
+
+        practica = obtener_practica(practica_clave)
+        sesion = obtener_sesion(practica_clave, sesion_num)
+        nombre_practica = practica["nombre"] if practica else "Meditación"
+        titulo_sesion = sesion["titulo"] if sesion else f"Sesión {sesion_num}"
+
+        pantalla(
+            ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=58, color=COLOR_EXITO),
+            ft.Text("¡Sesión completada!", size=24, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            ft.Text(
+                f"{nombre_practica} · {titulo_sesion}",
+                size=14,
+                color=COLOR_TEXTO_MEDIO,
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+            ft.Container(
+                content=ft.Text(
+                    "Haberle dedicado estos minutos a tu mente ya es un gran paso. "
+                    "La regulación emocional se entrena día a día, con paciencia y amabilidad hacia vos mismo/a.",
+                    size=14,
+                    color=COLOR_TEXTO_FUERTE,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                padding=16,
+                border_radius=12,
+                bgcolor=COLOR_CAJA_INFO,
+                width=ancho_campo(),
+            ),
+            ft.Divider(height=14, color=ft.Colors.TRANSPARENT),
+            ft.ElevatedButton(
+                "Volver al menú principal",
+                icon=ft.Icons.HOME,
+                on_click=lambda _: ir_a_menu_principal(),
+                width=ancho_campo(),
+                height=50,
+                bgcolor=COLOR_PRIMARIO,
+                color=ft.Colors.WHITE,
+            ),
+            ft.OutlinedButton(
+                "Ver prácticas de meditación",
+                icon=ft.Icons.SPA,
+                on_click=lambda _: ir_a(mostrar_menu_meditacion),
+                width=ancho_campo(),
+                height=45,
+            ),
+            ft.TextButton(
+                "Necesito ayuda ahora",
+                icon=ft.Icons.PHONE_IN_TALK,
+                on_click=lambda _: ir_a(mostrar_paso_crisis_recursos),
+                style=ft.ButtonStyle(color=ft.Colors.RED_700),
+            ),
+            mostrar_volver=False,
+        )
+
     # TRABAJO EMOCIONAL (submenú, bloque 2 del menú principal)
     # ----------------------------------------------------------
     # Agrupa las 2 opciones de este bloque: registrar una situación nueva
@@ -9046,4 +9691,5 @@ if os.environ.get("FLET_WEB", "").lower() in ("1", "true", "yes"):
 
     app = _MiddlewareGuardian(app)
 else:
-    ft.app(target=main)
+    ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+    ft.app(target=main, assets_dir=ASSETS_DIR)

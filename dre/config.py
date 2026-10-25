@@ -22,6 +22,7 @@ SUPABASE_BIENESTAR_URL = f"{SUPABASE_BASE_URL}/chequeos_bienestar"
 SUPABASE_REAPPRAISAL_URL = f"{SUPABASE_BASE_URL}/ejercicios_reappraisal"
 SUPABASE_JUEGOS_REAPPRAISAL_URL = f"{SUPABASE_BASE_URL}/progreso_juegos_reappraisal"
 SUPABASE_TEXTO_LIBRE_URL = f"{SUPABASE_BASE_URL}/sesiones_texto_libre"
+SUPABASE_MEDITACIONES_URL = f"{SUPABASE_BASE_URL}/sesiones_meditacion"
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
