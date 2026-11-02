@@ -276,7 +276,7 @@ SUBTITULO_JUEGO_OPCIONES = "Elegí la mejor reinterpretación entre varias opcio
 NOMBRE_BOTON_PROXIMO_NIVEL = "Próximo nivel"
 NOMBRE_BOTON_PROXIMO_BLOQUE = "Próximo bloque"
 SUBTITULO_BOTON_PROXIMO_BLOQUE = "5 situaciones nuevas para escribir"
-NOMBRE_PERSONALIZACION = "Mi espacio"
+NOMBRE_PERSONALIZACION = "Personalizar"
 NOMBRE_SECCION_MEDITACION = "Meditación"
 SUBTITULO_SECCION_MEDITACION = "Prácticas guiadas para calmar y enfocar tu mente"
 
@@ -675,7 +675,7 @@ def main(page: ft.Page):
             else:
                 ajustar_genero_controles(hijos)
 
-    def pantalla(*controles, mostrar_volver=True, decoraciones=None):
+    def pantalla(*controles, mostrar_volver=True, decoraciones=None, accion_volver=None):
         # decoraciones: lista opcional de controles ya posicionados
         # (left/top/right/bottom) que se dibujan DETRÁS del contenido,
         # como empapelado de la tarjeta — hoy lo usa solo el menú
@@ -687,14 +687,14 @@ def main(page: ft.Page):
             ajustar_genero_controles(control)
 
         filas = []
-        if mostrar_volver and len(historial) > 1:
+        if mostrar_volver and (len(historial) > 1 or accion_volver is not None):
             filas.append(
                 ft.Row(
                     [
                         ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
                             tooltip="Volver",
-                            on_click=volver,
+                            on_click=accion_volver or volver,
                             icon_color=ft.Colors.WHITE,
                             bgcolor=COLOR_PRIMARIO,
                         )
@@ -1196,6 +1196,7 @@ def main(page: ft.Page):
     ]
 
     def mostrar_perfil():
+        print("ENTRANDO A MOSTRAR PERFIL")
         es_primera_vez = not estado["nombre"]
 
         input_nombre = ft.TextField(label="Nombre", value=estado["nombre"], width=ancho_campo())
@@ -1303,14 +1304,27 @@ def main(page: ft.Page):
             )
         controles.extend([input_nombre, input_edad, dropdown_genero, dropdown_tratamiento])
         if estado.get("tiene_password", True):
-            # No tiene sentido pedir esto a alguien que entró con Google:
-            # nunca va a necesitar "¿Olvidaste tu contraseña?" porque no
-            # tiene una contraseña propia que recuperar.
+            # Mostrar pregunta de seguridad solo para usuarios con contraseña
             controles.extend([dropdown_pregunta_seguridad, input_respuesta_seguridad])
+
         controles.extend([texto_error, boton_guardar])
 
-        pantalla(*controles, mostrar_volver=not es_primera_vez)
+        if not es_primera_vez:
+            controles.append(
+                ft.OutlinedButton(
+                    NOMBRE_PERSONALIZACION,
+                    icon=ft.Icons.PALETTE_OUTLINED,
+                    on_click=lambda _: ir_a(mostrar_personalizacion),
+                    width=ancho_campo(),
+                    height=45,
+                )
+            )
 
+        pantalla(
+            *controles,
+            mostrar_volver=not es_primera_vez,
+            accion_volver=lambda _: ir_a(mostrar_menu_principal),
+        )
     # ==========================================================
     # MENÚ PRINCIPAL
     # ==========================================================
@@ -1603,6 +1617,12 @@ def main(page: ft.Page):
                     on_click=lambda _: ir_a(mostrar_consejos_biblioteca),
                     style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=COLOR_PRIMARIO),
                 ),
+                ft.Text(
+                    f"🔥 {racha_vigente()}",
+                    size=20,
+                    weight=ft.FontWeight.BOLD,
+                    color=COLOR_TEXTO_FUERTE,
+                ),
                 ft.Row(
                     [
                         ft.IconButton(
@@ -1622,7 +1642,7 @@ def main(page: ft.Page):
                         ft.IconButton(
                             icon=ft.Icons.PERSON,
                             tooltip="Mi perfil",
-                            on_click=lambda _: ir_a(mostrar_perfil),
+                            on_click=lambda e: (print("CLICK PERFIL"), mostrar_perfil()),
                             icon_color=ft.Colors.WHITE,
                             bgcolor=COLOR_PRIMARIO,
                         ),
@@ -1656,9 +1676,7 @@ def main(page: ft.Page):
             ft.Text("Diario de Reflexión Emocional", size=11, color=COLOR_TEXTO_SUAVE, text_align=ft.TextAlign.CENTER),
             ft.Text(f"Hola, {estado['nombre']}!", size=24, weight=ft.FontWeight.BOLD),
             ft.Text("¿Cómo querés usar este espacio hoy?", color=COLOR_TEXTO_MEDIO),
-            tarjeta_racha,                      
             tarjeta_apoyo,
-            aviso_bienestar,
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             # Ítem principal: Entrená tu mente (más grande y destacado)
             ft.Container(
@@ -1746,14 +1764,6 @@ def main(page: ft.Page):
                 on_click=lambda _: ir_a(mostrar_bienestar),
                 width=ancho_campo(),
                 height=50,
-            ),
-            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-            ft.OutlinedButton(
-                NOMBRE_PERSONALIZACION,
-                icon=ft.Icons.PALETTE_OUTLINED,
-                on_click=lambda _: ir_a(mostrar_personalizacion),
-                width=ancho_campo(),
-                height=45,
             ),
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             # Los dos accesos "de servicio" van chicos, uno en cada
@@ -1859,14 +1869,6 @@ def main(page: ft.Page):
             ),
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             *controles_practicas,
-            ft.Divider(height=14, color=ft.Colors.TRANSPARENT),
-            ft.ElevatedButton(
-                "Volver al menú principal",
-                icon=ft.Icons.ARROW_BACK,
-                on_click=lambda _: ir_a_menu_principal(),
-                width=ancho_campo(),
-                height=48,
-            ),
             ft.TextButton(
                 "Necesito ayuda ahora",
                 icon=ft.Icons.PHONE_IN_TALK,
@@ -2312,16 +2314,6 @@ def main(page: ft.Page):
                 border_radius=12,
                 bgcolor=COLOR_CAJA_INFO,
                 width=ancho_campo(),
-            ),
-            ft.Divider(height=14, color=ft.Colors.TRANSPARENT),
-            ft.ElevatedButton(
-                "Volver al menú principal",
-                icon=ft.Icons.HOME,
-                on_click=lambda _: ir_a_menu_principal(),
-                width=ancho_campo(),
-                height=50,
-                bgcolor=COLOR_PRIMARIO,
-                color=ft.Colors.WHITE,
             ),
             ft.OutlinedButton(
                 "Ver prácticas de meditación",
@@ -6806,7 +6798,7 @@ def main(page: ft.Page):
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             ft.ElevatedButton(
                 "Volver al menú principal" if hay_sesion else "Volver al inicio",
-                on_click=volver,
+                on_click=accion_volver or volver,
                 width=ancho_campo(),
                 height=50,
             ),
