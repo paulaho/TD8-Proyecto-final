@@ -26,9 +26,10 @@ def buscar_usuario_por_email(email):
         return (resultados[0], True) if resultados else (None, True)
 
     except Exception as e:
-        print("Error de red (usuarios_regulacion):", repr(e))
+        import traceback
+        print("ERROR AL CONSULTAR SUPABASE:")
+        traceback.print_exc()
         return None, False
-
 
 def crear_usuario(email, password_hash, password_salt=None):
     try:
