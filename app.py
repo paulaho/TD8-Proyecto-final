@@ -1968,8 +1968,30 @@ def main(page: ft.Page):
             ir_a(mostrar_menu_meditacion)
             return
 
-        # Limpiar cualquier estado previo
-        page.run_task(_detener_audio_meditacion)
+        # Limpiar estado previo de forma SÍNCRONA (sin run_task), para que
+        # nada se ejecute después y cancele la sesión nueva.
+        async def _liberar_audio_viejo(audio_viejo):
+            try:
+                await audio_viejo.release()
+            except Exception:
+                pass
+
+        for _ev in ("evento_reanudar", "evento_completado"):
+            if _meditacion_estado.get(_ev):
+                _meditacion_estado[_ev].set()
+        _tarea_vieja = _meditacion_estado.get("tarea_reproductor")
+        if _tarea_vieja and not _tarea_vieja.done():
+            _tarea_vieja.cancel()
+        _audio_viejo = _meditacion_estado.get("audio_control")
+        if _audio_viejo:
+            try:
+                if _audio_viejo in page.services:
+                    page.services.remove(_audio_viejo)
+            except Exception:
+                pass
+            page.run_task(_liberar_audio_viejo, _audio_viejo)
+        _meditacion_estado["audio_control"] = None
+        _meditacion_estado["tarea_reproductor"] = None
 
         _meditacion_estado["cancelado"] = False
         _meditacion_estado["pausado"] = False
@@ -2075,7 +2097,7 @@ def main(page: ft.Page):
         async def forzar_play(e=None):
             if _meditacion_estado.get("audio_control"):
                 try:
-                    await _meditacion_estado["audio_control"].play()
+                    await asyncio.wait_for(_meditacion_estado["audio_control"].resume(), timeout=5.0)
                     boton_fallback_play.visible = False
                     page.update()
                 except Exception as ex_f:
@@ -2119,15 +2141,22 @@ def main(page: ft.Page):
                 if _meditacion_estado.get("evento_completado"):
                     _meditacion_estado["evento_completado"].set()
 
+        def on_audio_loaded(e):
+            ev = _meditacion_estado.get("evento_cargado")
+            if ev:
+                ev.set()
+
         audio_control = fta.Audio(
             src="",
             autoplay=False,
             release_mode=fta.ReleaseMode.STOP,
             on_state_change=on_audio_state,
+            on_loaded=on_audio_loaded,
         )
         page.services.append(audio_control)
         page.update()
         _meditacion_estado["audio_control"] = audio_control
+        _meditacion_estado["evento_cargado"] = asyncio.Event()
 
         async def ciclo_reproduccion():
             for idx in range(len(fragmentos)):
@@ -2148,18 +2177,35 @@ def main(page: ft.Page):
                 _meditacion_estado["evento_completado"].clear()
                 page.update()
 
-                # Cargar y reproducir audio
+                # Cargar y reproducir audio: esperar evento on_loaded antes de play
                 ruta_audio = "/" + frag["audio"].lstrip("/")
+                _meditacion_estado["evento_cargado"] = asyncio.Event()
                 audio_control.src = ruta_audio
                 audio_control.update()
-                await asyncio.sleep(0.05)
 
+                # Esperar hasta 5s a que el audio este listo (on_loaded)
                 try:
-                    await audio_control.play(0)
-                except Exception as ex_play:
-                    print(f"Error al reproducir audio {idx + 1}: {ex_play}")
-                    boton_fallback_play.visible = True
-                    page.update()
+                    await asyncio.wait_for(
+                        _meditacion_estado["evento_cargado"].wait(), timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    pass  # Intentar reproducir de todas formas
+
+                if _meditacion_estado["cancelado"]:
+                    return
+
+                # play() se cuelga 30 s en Windows; resume() sobre la fuente
+                # ya cargada sí arranca el audio. Se reintenta unas veces.
+                for _intento in range(4):
+                    if _meditacion_estado["cancelado"]:
+                        return
+                    try:
+                        await asyncio.wait_for(audio_control.resume(), timeout=5.0)
+                    except Exception as ex_play:
+                        print(f"Aviso al iniciar audio {idx + 1} (intento {_intento + 1}): {ex_play!r}")
+                    await asyncio.sleep(1.0)
+                    if _meditacion_estado["audio_iniciado"] or _meditacion_estado["pausado"]:
+                        break
 
                 # Esperar a que termine de sonar el audio
                 tiempo_esperado = 0.0
@@ -2232,8 +2278,6 @@ def main(page: ft.Page):
                 await _detener_audio_meditacion()
                 ir_a(lambda: mostrar_final_meditacion(practica_clave, sesion_num))
 
-        _meditacion_estado["tarea_reproductor"] = page.run_task(ciclo_reproduccion)
-
         encabezado_reproductor = ft.Row(
             [
                 ft.IconButton(
@@ -2261,23 +2305,24 @@ def main(page: ft.Page):
             texto_progreso,
             barra_progreso,
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-            caja_texto,
-            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
             estado_label,
             texto_aviso,
             boton_fallback_play,
             boton_saltar,
-            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-            ft.Row(
+            ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+            ft.Column(
                 [
                     boton_pausa,
                     boton_terminar,
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=12,
             ),
             mostrar_volver=False,
         )
+
+        # Lanzar reproduccion DESPUES de que pantalla() renderizo la UI
+        _meditacion_estado["tarea_reproductor"] = page.run_task(ciclo_reproduccion)
 
     def mostrar_final_meditacion(practica_clave, sesion_num):
         page.run_task(_detener_audio_meditacion)
