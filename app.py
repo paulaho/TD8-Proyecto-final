@@ -235,7 +235,7 @@ import urllib.parse
 import asyncio
 from datetime import datetime, date, timedelta, timezone
 from flet.auth.providers import GoogleOAuthProvider
-from test_inicial import mostrar_test_inicial
+from test_inicial import mostrar_test_inicial, mostrar_extras_personalizacion
 
 # ==========================================================
 # --- CONTENIDO CLÍNICO (basado en Terapia Cognitiva Conductual) ---
@@ -799,6 +799,27 @@ def main(page: ft.Page):
         page.run_task(precargar_batches_texto_libre)
         ir_a_menu_principal()
 
+    def completar_extras_perfil():
+        perfil = dict(estado.get("perfil_contexto") or {})
+
+        def guardar(extras):
+            perfil.update(extras)
+            perfil["extras_completados"] = True
+            estado["perfil_contexto"] = perfil
+            if not estado.get("modo_local"):
+                try:
+                    requests.patch(
+                        f"{SUPABASE_USUARIOS_URL}?id=eq.{estado['usuario_id']}",
+                        headers=HEADERS,
+                        json={"perfil_contexto": perfil},
+                        timeout=10,
+                    )
+                except Exception as ex:
+                    print("Error guardando extras del perfil:", repr(ex))
+            ir_a_menu_principal()
+
+        mostrar_extras_personalizacion(page, perfil, guardar)
+
     def entrar_con_usuario(usuario, local=False):
         estado["email"] = usuario["email"]
         estado["usuario_id"] = usuario["id"]
@@ -830,8 +851,12 @@ def main(page: ft.Page):
 
         historial.clear()
 
+
         if estado["nombre"]:
-            ir_a_menu_principal()
+            if estado["realizo_test_inicial"] and not estado["perfil_contexto"].get("extras_completados"):
+                completar_extras_perfil()
+            else:
+                ir_a_menu_principal()
         else:
             ir_a(mostrar_perfil)
 

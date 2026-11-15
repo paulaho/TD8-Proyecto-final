@@ -130,7 +130,11 @@ def mostrar_test_inicial(page: ft.Page, estado: dict, SUPABASE_USUARIOS_URL: str
             respuestas["hermanos"] = dd_hermanos.value
             respuestas["ocupacion"] = dd_ocupacion.value
             respuestas["pareja"] = dd_pareja.value
-            mostrar_paso_regulacion()
+            mostrar_extras_personalizacion(
+                page,
+                respuestas,
+                lambda extras: (respuestas.update(extras), mostrar_paso_regulacion()),
+            )
 
         controles = [
             ft.Icon(ft.Icons.FAMILY_RESTROOM, size=48, color=COLOR_PRIMARIO),
@@ -237,6 +241,11 @@ def mostrar_test_inicial(page: ft.Page, estado: dict, SUPABASE_USUARIOS_URL: str
                 "familiaridad_regulacion": respuestas["familiaridad_regulacion_texto"],
             }
 
+            perfil_contexto["extras_completados"] = True
+            for k in ("estudio_nivel", "trabajo_modalidad", "salud_temas", "vinculos_temas", "amigos_satisfaccion", "apoyo_cuando_solo"):
+                if respuestas.get(k):
+                    perfil_contexto[k] = respuestas[k]
+
             # Guardar en el estado local en memoria
             estado["perfil_contexto"] = perfil_contexto
             estado["realizo_test_inicial"] = True
@@ -286,3 +295,150 @@ def mostrar_test_inicial(page: ft.Page, estado: dict, SUPABASE_USUARIOS_URL: str
 
     # Iniciar en el primer paso
     mostrar_paso_familia()
+
+OPCIONES_ESTUDIO_NIVEL = ["Secundaria", "Terciario o universitario", "Posgrado", "Cursos o idiomas"]
+OPCIONES_TRABAJO_MODALIDAD = [
+    "En relación de dependencia (tengo jefe/a o equipo)",
+    "Por cuenta propia (trabajo con clientes)",
+    "Un poco de ambas",
+]
+OPCIONES_SALUD_TEMAS = [
+    "Sueño y descanso",
+    "Actividad física y rutinas",
+    "Consultas y controles médicos",
+    "Dolores o molestias físicas",
+    "Cansancio y energía",
+]
+OPCIONES_VINCULOS_TEMAS = [
+    "Grupos de amigos y juntadas",
+    "Conocer gente nueva",
+    "Poner límites o decir que no",
+    "Mensajes y redes sociales",
+    "Mi pareja",
+]
+
+OPCIONES_AMIGOS_SATISFACCION = ["Muy conforme", "Conforme", "Poco conforme", "Nada conforme"]
+OPCIONES_APOYO_SOLEDAD = ["Siempre", "Casi siempre", "A veces", "Casi nunca"]
+
+
+def mostrar_extras_personalizacion(page: ft.Page, perfil_base: dict, al_terminar):
+    """
+    Pantalla opcional para personalizar Salud, Vínculos y Trabajo/estudio.
+    perfil_base: dict con al menos "ocupacion" y "pareja".
+    al_terminar(extras: dict): recibe solo lo que la persona eligió ({} si omitió).
+    """
+    ocupacion = perfil_base.get("ocupacion") or ""
+    estudia = ocupacion in ("Estudio", "Estudio y trabajo")
+    trabaja = ocupacion in ("Trabajo", "Estudio y trabajo")
+    en_pareja = perfil_base.get("pareja") == "Sí"
+
+    def ancho_campo(base=340):
+        disponible = (page.width or (base + 70)) - 70
+        return max(260, min(base, disponible))
+
+    dd_estudio = (
+        ft.Dropdown(
+            label="¿Qué estás estudiando?",
+            options=[ft.dropdown.Option(op) for op in OPCIONES_ESTUDIO_NIVEL],
+            width=ancho_campo(),
+        )
+        if estudia else None
+    )
+    dd_trabajo = (
+        ft.Dropdown(
+            label="¿Cómo trabajás?",
+            options=[ft.dropdown.Option(op) for op in OPCIONES_TRABAJO_MODALIDAD],
+            width=ancho_campo(),
+        )
+        if trabaja else None
+    )
+    checks_salud = [ft.Checkbox(label=op) for op in OPCIONES_SALUD_TEMAS]
+    checks_vinculos = [
+        ft.Checkbox(label=op) for op in OPCIONES_VINCULOS_TEMAS if en_pareja or op != "Mi pareja"
+    ]
+
+    dd_amigos = ft.Dropdown(
+        label="¿Qué tan conforme estás con la cantidad de amigos/as que tenés?",
+        options=[ft.dropdown.Option(op) for op in OPCIONES_AMIGOS_SATISFACCION],
+        width=ancho_campo(),
+    )
+    dd_apoyo = ft.Dropdown(
+        label="Cuando te sentís solo/a, ¿tenés a quién recurrir?",
+        options=[ft.dropdown.Option(op) for op in OPCIONES_APOYO_SOLEDAD],
+        width=ancho_campo(),
+    )
+
+    def terminar(guardar):
+        extras = {}
+        if guardar:
+            if dd_estudio is not None and dd_estudio.value:
+                extras["estudio_nivel"] = dd_estudio.value
+            if dd_trabajo is not None and dd_trabajo.value:
+                extras["trabajo_modalidad"] = dd_trabajo.value
+            temas_salud = [c.label for c in checks_salud if c.value]
+            if temas_salud:
+                extras["salud_temas"] = temas_salud
+            temas_vinculos = [c.label for c in checks_vinculos if c.value]
+            if temas_vinculos:
+                extras["vinculos_temas"] = temas_vinculos
+            if dd_amigos is not None and dd_amigos.value:
+                extras["amigos_satisfaccion"] = dd_amigos.value
+            if dd_apoyo is not None and dd_apoyo.value:
+                extras["apoyo_soledad"] = dd_apoyo.value
+            if dd_amigos.value:
+                extras["amigos_satisfaccion"] = dd_amigos.value
+            if dd_apoyo.value:
+                extras["apoyo_cuando_solo"] = dd_apoyo.value
+        al_terminar(extras)
+
+    controles = [
+        ft.Icon(ft.Icons.TUNE, size=48, color=COLOR_PRIMARIO),
+        ft.Text("Un último paso (opcional)", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+        ft.Text(
+            "Es solo para que los ejercicios se parezcan más a tu día a día. Podés saltearlo.",
+            color=COLOR_TEXTO_MEDIO,
+            text_align=ft.TextAlign.CENTER,
+            size=14,
+        ),
+    ]
+    if dd_estudio is not None:
+        controles.append(dd_estudio)
+    if dd_trabajo is not None:
+        controles.append(dd_trabajo)
+    controles += [
+        ft.Text("Salud: ¿qué te gustaría practicar?", size=15, weight=ft.FontWeight.W_600),
+        ft.Container(content=ft.Column(checks_salud, spacing=0), width=ancho_campo(460)),
+        ft.Text("Vínculos", size=15, weight=ft.FontWeight.W_600),
+        dd_amigos,
+        dd_apoyo,
+        ft.Text("¿En qué situaciones sociales te gustaría practicar?", size=14, color=COLOR_TEXTO_MEDIO),
+        ft.Container(content=ft.Column(checks_vinculos, spacing=0), width=ancho_campo(460)),
+        ft.Text("Podés elegir varias opciones o ninguna.", size=12, color=COLOR_TEXTO_MEDIO),
+        ft.Row(
+            [
+                ft.TextButton("Omitir", on_click=lambda _: terminar(False)),
+                ft.ElevatedButton("Listo", on_click=lambda _: terminar(True), width=160, height=48),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=15,
+        ),
+    ]
+
+    columna = ft.Column(
+        controles,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=14,
+        scroll=ft.ScrollMode.AUTO,
+        expand=True,
+    )
+    tarjeta = ft.Container(
+        content=columna,
+        padding=24,
+        margin=15,
+        border_radius=20,
+        bgcolor=ft.Colors.with_opacity(0.97, COLOR_TARJETA),
+        expand=True,
+    )
+    page.controls.clear()
+    page.add(ft.Container(content=tarjeta, alignment=ft.Alignment.CENTER, expand=True))
+    page.update()
