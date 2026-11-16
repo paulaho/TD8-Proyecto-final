@@ -213,6 +213,14 @@ def _asignar_disparadores(perfil, nivel_inicial):
 
 def _bloque_personalizacion(perfil, contexto, genero, edad_str):
     ocupacion = contexto.get("ocupacion", "No especificado")
+    nota_apoyo = ""
+    if contexto.get("apoyo_cuando_solo") in ("A veces", "Casi nunca"):
+        nota_apoyo = (
+            "\n    - Importante: la persona no siempre tiene a quién recurrir cuando se siente sola. "
+            "NUNCA escribas situaciones ni reappraisals que den por sentado que puede apoyarse en alguien "
+            "(por ejemplo \"hablá con tus amigos\" o \"seguro tu familia te va a apoyar\"). "
+            "Evitá escenas de aislamiento extremo o abandono total, y no menciones este dato de forma explícita."
+        )
     base = (
         "INFORMACIÓN PERSONALIZADA DEL USUARIO:\n"
         f"    - Género: {genero}\n"
@@ -222,6 +230,7 @@ def _bloque_personalizacion(perfil, contexto, genero, edad_str):
     if perfil is _PERFILES_CATEGORIA["familia"]:
         return (
             base
+            + nota_apoyo
             + f"    - Convivencia: {contexto.get('convivencia', 'No especificado')}\n"
             + f"    - Tiene hermanos: {contexto.get('hermanos', 'No especificado')}\n"
             + f"    - Estado en pareja: {contexto.get('pareja', 'No especificado')}\n\n"
@@ -260,6 +269,29 @@ def _bloque_personalizacion(perfil, contexto, genero, edad_str):
     else:
         extra_pareja = ""
 
+    extras = ""
+    if perfil is _PERFILES_CATEGORIA["trabajo"]:
+        niv = contexto.get("estudio_nivel")
+        mod = contexto.get("trabajo_modalidad")
+        if niv:
+            extras += f"    - Estudia: {niv}. Ajustá las situaciones de estudio a ese nivel (parciales y trabajos prácticos en terciario/universitario, tesis o entregas largas en posgrado, cursada y exámenes en secundaria).\n"
+        if mod:
+            extras += f"    - Modalidad de trabajo: {mod}. Si trabaja por cuenta propia, las tensiones son con clientes, plazos e ingresos (no con un jefe/a); si es en relación de dependencia, con jefe/a y equipo.\n"
+    elif perfil is _PERFILES_CATEGORIA["salud"]:
+        temas = contexto.get("salud_temas") or []
+        if temas:
+            extras += (
+                f"    - Temas de salud que la persona quiere practicar: {', '.join(temas)}. "
+                "Al menos 3 de las 5 situaciones deben relacionarse con esos temas. "
+                "Nunca generes situaciones sobre peso, alimentación restrictiva, imagen corporal, diagnósticos ni condiciones clínicas.\n"
+            )
+    elif perfil is _PERFILES_CATEGORIA["vinculos"]:
+        temas = contexto.get("vinculos_temas") or []
+        if temas:
+            extras += (
+                f"    - Situaciones sociales que la persona quiere practicar: {', '.join(temas)}. "
+                "Al menos 3 de las 5 situaciones deben relacionarse con esos temas.\n"
+            )
     return (
         base
         + "\n    CÓMO USAR LOS DATOS PERSONALES:\n"
@@ -268,6 +300,7 @@ def _bloque_personalizacion(perfil, contexto, genero, edad_str):
         "como máximo, solo como detalle de fondo y nunca como quien causa el malestar.\n"
         + extra_ocupacion
         + extra_pareja
+        + nota_apoyo
         + "    - Edad y género: ajustá escenarios, vocabulario y personajes en segunda persona, sin estereotipos.\n"
         "    - No nombres los datos del perfil de forma forzada o literal; que se noten orgánicamente en el escenario."
     )
