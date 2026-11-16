@@ -1,7 +1,6 @@
 from dotenv import load_dotenv
 
 load_dotenv()
-
 from dre.supabase_usuarios import (
     buscar_usuario_por_email,
     crear_usuario,
