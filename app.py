@@ -50,6 +50,23 @@ from dre.tema import (
     MENTO_FUENTE,
 )
 
+# Nueva identidad visual: fondo blanco, acentos rosa y texto oscuro.
+# Se definen aquí para no requerir cambios en dre/tema.py.
+COLOR_FONDO = "#FFFFFF"
+COLOR_TARJETA = "#FFFFFF"
+COLOR_PRIMARIO = "#F18B9B"
+COLOR_PRIMARIO_OSCURO = "#E77388"
+COLOR_CAJA_SUAVE = "#FFFFFF"
+COLOR_CAJA_INFO = "#FFFFFF"
+COLOR_DORADO = "#F6B9C3"
+COLOR_TEXTO_FUERTE = "#202020"
+COLOR_TEXTO_MEDIO = "#555555"
+COLOR_TEXTO_SUAVE = "#777777"
+MENTO_ROSA = "#F18B9B"
+MENTO_ROSA_TEXTO = "#E77388"
+MENTO_AMARILLO_CLARO = "#FFFFFF"
+MENTO_CELESTE_CAJA = "#FFFFFF"
+
 from dre.seguridad import (
     detectar_riesgo_suicida,
     detectar_riesgo_terceros,
@@ -439,7 +456,8 @@ def main(page: ft.Page):
     # sliders, checkboxes y radios en toda la app, así queda coherente
     # sin tener que restylear control por control.
     page.theme = ft.Theme(color_scheme_seed=COLOR_PRIMARIO)
-    page.bgcolor = COLOR_FONDO
+    page.theme.color_scheme = ft.ColorScheme(primary=COLOR_PRIMARIO, on_primary=ft.Colors.WHITE, surface=ft.Colors.WHITE, on_surface="#202020")
+    page.bgcolor = ft.Colors.WHITE
     page.padding = 0
     # Tipografía Poppins: solo la usan las pantallas de "Practicá con
     # escenarios" (integración MENTO), como identidad propia de ese modo.
@@ -678,6 +696,27 @@ def main(page: ft.Page):
             else:
                 ajustar_genero_controles(hijos)
 
+    # Paleta visual de Mento: colores de cada categoría y fondos pastel.
+    MENTO_UI_PALETA = {
+        "familia": {"boton": "#FF8894", "fondo": "#FFB8BF"},
+        "salud": {"boton": "#C382C2", "fondo": "#E8C8E7"},
+        "vinculos": {"boton": "#5EA8E6", "fondo": "#B9DDF7"},
+        "trabajo": {"boton": "#5CC2C6", "fondo": "#B7E7E7"},
+        "trabajo_estudio": {"boton": "#5CC2C6", "fondo": "#B7E7E7"},
+    }
+
+    def _mento_ui_paleta(clave):
+        clave = str(clave or "").lower().replace("í", "i").replace("/", "_").replace(" ", "_")
+        if clave.startswith("trabajo"):
+            clave = "trabajo"
+        return MENTO_UI_PALETA.get(clave)
+
+    def _mento_ui_activar_categoria(clave):
+        estado["_ui_categoria_activa"] = clave
+
+    def _mento_ui_salir_categoria():
+        estado.pop("_ui_categoria_activa", None)
+
     def pantalla(*controles, mostrar_volver=True, decoraciones=None, accion_volver=None):
         # decoraciones: lista opcional de controles ya posicionados
         # (left/top/right/bottom) que se dibujan DETRÁS del contenido,
@@ -685,6 +724,8 @@ def main(page: ft.Page):
         # principal para las florcitas del chequeo de bienestar.
         page.controls.clear()
         page.overlay.clear()
+        paleta_ui = _mento_ui_paleta(estado.get("_ui_categoria_activa"))
+        page.bgcolor = paleta_ui["fondo"] if paleta_ui else ft.Colors.WHITE
 
         for control in controles:
             ajustar_genero_controles(control)
@@ -732,9 +773,9 @@ def main(page: ft.Page):
         tarjeta = ft.Container(
             content=contenido_tarjeta,
             padding=20,
-            margin=15,
-            border_radius=20,
-            bgcolor=ft.Colors.with_opacity(0.97, COLOR_TARJETA),
+            margin=0,
+            border_radius=0,
+            bgcolor=(paleta_ui["fondo"] if paleta_ui else ft.Colors.WHITE),
             expand=True,
         )
 
@@ -838,7 +879,7 @@ def main(page: ft.Page):
         estado["color_fondo"] = usuario.get("color_fondo") or ""
         estado["racha_actual"] = usuario.get("racha_actual") or 0
         estado["racha_ultimo_dia"] = usuario.get("racha_ultimo_dia") or ""
-        page.bgcolor = estado["color_fondo"] or COLOR_FONDO
+        page.bgcolor = ft.Colors.WHITE
         estado["modo_local"] = local
         estado["realizo_test_inicial"] = bool(usuario.get("realizo_test_inicial")) # TEMP TEST
         estado["perfil_contexto"] = usuario.get("perfil_contexto") or {} # TEMP TEST
@@ -1189,7 +1230,7 @@ def main(page: ft.Page):
         estado["cosmetico_planta"] = ""
         estado["cosmetico_fondo"] = ""
         estado["color_fondo"] = ""
-        page.bgcolor = COLOR_FONDO
+        page.bgcolor = ft.Colors.WHITE
         estado["modo_local"] = False
         estado["_reportes_locales"] = []
         estado["_temas_locales"] = []
@@ -1374,7 +1415,7 @@ def main(page: ft.Page):
     PAGINAS_INSTRUCCIONES_INICIALES = [
         {
             "icono": ft.Icons.WAVING_HAND_OUTLINED,
-            "color": COLOR_PRIMARIO,
+            "color": "#F18B9B",
             "titulo": "¡Bienvenido/a!",
             "texto": "Este es un espacio para reflexionar sobre pensamientos, emociones o situaciones que te generen malestar. Podés empezar un registro y retomarlo cuando quieras, incluso días después.",
         },
@@ -1449,13 +1490,13 @@ def main(page: ft.Page):
         if pagina > 0:
             botones.append(ft.OutlinedButton("Atrás", on_click=ir_a_pagina(pagina - 1), height=50, expand=True))
         botones.append(
-            ft.ElevatedButton("Empezar" if es_ultima else "Siguiente", on_click=terminar if es_ultima else ir_a_pagina(pagina + 1), height=50, expand=True)
+            ft.ElevatedButton("Empezar" if es_ultima else "Siguiente", on_click=terminar if es_ultima else ir_a_pagina(pagina + 1), height=50, expand=True, style=ft.ButtonStyle(bgcolor="#F18B9B", color=ft.Colors.WHITE))
         )
 
         pantalla(
-            ft.Icon(contenido["icono"], size=70, color=contenido["color"]),
+            ft.Icon(contenido["icono"], size=54, color=contenido["color"]),
             ft.Text(contenido["titulo"], size=26, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
-            ft.Text(contenido["texto"], size=18, color=COLOR_TEXTO_FUERTE, text_align=ft.TextAlign.CENTER),
+            ft.Text(contenido["texto"], size=16, color=COLOR_TEXTO_FUERTE, text_align=ft.TextAlign.CENTER),
             puntos,
             ft.Row(botones, alignment=ft.MainAxisAlignment.CENTER, spacing=12, width=ancho_campo()),
             # La flechita de volver (arriba a la izquierda) solo se
@@ -1527,6 +1568,7 @@ def main(page: ft.Page):
         )
 
     def mostrar_menu_principal():
+        _mento_ui_salir_categoria()
         historial.clear()
         historial.append(mostrar_menu_principal)
 
@@ -1612,7 +1654,7 @@ def main(page: ft.Page):
                 ),
                 padding=15,
                 border_radius=12,
-                bgcolor=COLOR_CAJA_INFO,
+                bgcolor="#FFFFFF",
                 width=ancho_campo(),
             )
 
@@ -1630,7 +1672,7 @@ def main(page: ft.Page):
                 ),
                 padding=15,
                 border_radius=12,
-                bgcolor=COLOR_CAJA_INFO,
+                bgcolor="#FFFFFF",
                 width=ancho_campo(),
             )
 
@@ -1658,21 +1700,21 @@ def main(page: ft.Page):
                             tooltip="Instrucciones",
                             on_click=lambda _: ir_a(lambda: mostrar_instrucciones(0, PAGINAS_INSTRUCCIONES_COMPLETAS, permitir_volver=True)),
                             icon_color=ft.Colors.WHITE,
-                            bgcolor=COLOR_PRIMARIO,
+                            bgcolor="#F18B9B",
                         ),
                         ft.IconButton(
                             icon=ft.Icons.LOCAL_FLORIST,
                             tooltip="Tu jardín",
                             on_click=lambda _: ir_a(mostrar_jardin),
                             icon_color=ft.Colors.WHITE,
-                            bgcolor=COLOR_PRIMARIO,
+                            bgcolor="#F18B9B",
                         ),
                         ft.IconButton(
                             icon=ft.Icons.PERSON,
                             tooltip="Mi perfil",
                             on_click=lambda e: (print("CLICK PERFIL"), mostrar_perfil()),
                             icon_color=ft.Colors.WHITE,
-                            bgcolor=COLOR_PRIMARIO,
+                            bgcolor="#F18B9B",
                         ),
                     ],
                     spacing=8,
@@ -1694,15 +1736,14 @@ def main(page: ft.Page):
             content=ft.Text(texto_racha, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             padding=12,
             border_radius=12,
-            bgcolor=COLOR_CAJA_INFO,
+            bgcolor="#FFFFFF",
             width=ancho_campo(),
         )
 
         pantalla(
             encabezado,
-            ft.Text("DRE", size=20, weight=ft.FontWeight.BOLD, color=COLOR_PRIMARIO, text_align=ft.TextAlign.CENTER),
-            ft.Text("Diario de Reflexión Emocional", size=11, color=COLOR_TEXTO_SUAVE, text_align=ft.TextAlign.CENTER),
-            ft.Text(f"Hola, {estado['nombre']}!", size=24, weight=ft.FontWeight.BOLD),
+            
+            ft.Text(f"Hola, {estado['nombre']}!", size=24, weight=ft.FontWeight.BOLD, color="#171717"),
             ft.Text("¿Cómo querés usar este espacio hoy?", color=COLOR_TEXTO_MEDIO),
             tarjeta_apoyo,
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
@@ -1710,7 +1751,7 @@ def main(page: ft.Page):
             ft.Container(
                 content=ft.Row(
                     [
-                        ft.Icon(ft.Icons.SPORTS_ESPORTS, color=ft.Colors.WHITE, size=32),
+                        ft.Text("🐱🏋️", size=34),
                         ft.Column(
                             [
                                 ft.Text(
@@ -1736,8 +1777,8 @@ def main(page: ft.Page):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 padding=ft.Padding.symmetric(horizontal=18, vertical=16),
-                border_radius=16,
-                bgcolor=MENTO_ROSA_TEXTO,
+                border_radius=22,
+                bgcolor="#76C0C3",
                 width=ancho_campo(),
                 on_click=lambda _: ir_a(mostrar_reappraisal),
             ),
@@ -1746,7 +1787,7 @@ def main(page: ft.Page):
             ft.Container(
                 content=ft.Row(
                     [
-                        ft.Icon(ft.Icons.SPA, color=ft.Colors.WHITE, size=32),
+                        ft.Text("🐱💗", size=34),
                         ft.Column(
                             [
                                 ft.Text(
@@ -1772,8 +1813,8 @@ def main(page: ft.Page):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 padding=ft.Padding.symmetric(horizontal=18, vertical=16),
-                border_radius=16,
-                bgcolor=COLOR_PRIMARIO,
+                border_radius=22,
+                bgcolor="#6CA7E4",
                 width=ancho_campo(),
                 on_click=lambda _: ir_a(mostrar_menu_meditacion),
             ),
@@ -1836,7 +1877,7 @@ def main(page: ft.Page):
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.Icons.PLAY_CIRCLE_FILL, color=COLOR_PRIMARIO, size=28),
+                                ft.Icon(ft.Icons.PLAY_CIRCLE_FILL, color="#E77388", size=28),
                                 ft.Column(
                                     [
                                         ft.Text(f"Sesión {num_s}: {tit_s}", weight=ft.FontWeight.BOLD, size=15),
@@ -1853,7 +1894,7 @@ def main(page: ft.Page):
                         ),
                         padding=12,
                         border_radius=12,
-                        bgcolor=COLOR_CAJA_SUAVE,
+                        bgcolor="#FFFFFF",
                         width=ancho_campo(),
                         on_click=lambda _, p_clave=p["clave"], s_num=num_s: ir_a(
                             lambda: mostrar_preparacion_sesion(p_clave, s_num)
@@ -1867,7 +1908,7 @@ def main(page: ft.Page):
                         [
                             ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.SPA, color=COLOR_PRIMARIO, size=26),
+                                    ft.Icon(ft.Icons.SPA, color="#E77388", size=26),
                                     ft.Text(p["nombre"], size=18, weight=ft.FontWeight.BOLD, color=COLOR_TEXTO_FUERTE),
                                 ],
                                 spacing=8,
@@ -1881,7 +1922,7 @@ def main(page: ft.Page):
                     ),
                     padding=16,
                     border_radius=16,
-                    bgcolor=COLOR_CAJA_INFO,
+                    bgcolor="#FBE9ED",
                     width=ancho_campo(),
                 )
             )
@@ -2628,8 +2669,8 @@ def main(page: ft.Page):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 padding=ft.Padding.symmetric(horizontal=16, vertical=14),
-                border_radius=14,
-                bgcolor=MENTO_CELESTE,
+                border_radius=22,
+                bgcolor="#F18B9B",
                 width=ancho_campo(),
                 on_click=lambda _: ir_a(lambda: mostrar_reappraisal_juegos_categorias(juego="escritura")),
             ),
@@ -2663,8 +2704,8 @@ def main(page: ft.Page):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 padding=ft.Padding.symmetric(horizontal=16, vertical=14),
-                border_radius=14,
-                bgcolor=MENTO_ROSA_TEXTO,
+                border_radius=22,
+                bgcolor="#6CA7E4",
                 width=ancho_campo(),
                 on_click=lambda _: ir_a(lambda: mostrar_reappraisal_juegos_categorias(juego="opciones")),
             ),
@@ -3046,6 +3087,7 @@ def main(page: ft.Page):
         )
 
     def mostrar_reappraisal_juegos_categorias(juego="opciones"):
+        _mento_ui_salir_categoria()
 
         tarjetas = []
         for cat in MENTO_CATEGORIAS:
@@ -3058,6 +3100,7 @@ def main(page: ft.Page):
                     ir_a(
                         lambda clave=clave: mostrar_reappraisal_juegos_niveles(clave)
                     )
+            paleta = _mento_ui_paleta(cat["clave"])
             tarjetas.append(
                 ft.Container(
                     content=ft.Row(
@@ -3068,9 +3111,9 @@ def main(page: ft.Page):
                         spacing=12,
                         alignment=ft.MainAxisAlignment.CENTER,
                     ),
-                    padding=18,
-                    border_radius=16,
-                    bgcolor=cat["color"],
+                    padding=20,
+                    border_radius=28,
+                    bgcolor=paleta["boton"] if paleta else cat["color"],
                     width=ancho_campo(),
                     on_click=elegir,
                 )
@@ -3208,6 +3251,7 @@ def main(page: ft.Page):
         categoria_clave,
         indice_nivel,
     ):
+        _mento_ui_activar_categoria(categoria_clave)
 
         niveles = estado.get("_niveles_ia_por_categoria", {}).get(categoria_clave, [])
         if not niveles:
@@ -3274,31 +3318,27 @@ def main(page: ft.Page):
             opciones_controles = []
 
             for i, texto in enumerate(dato["opciones"]):
-
-                if evaluado["valor"] and i == seleccion["valor"]:
-                    if i in dato["correctas"]:
-                        color = MENTO_EXITO_JUEGO
-                    else:
-                        color = MENTO_ERROR_JUEGO
-
-                elif seleccion["valor"] == i:
-                    color = MENTO_SELECCION_JUEGO
-
+                seleccionada = seleccion["valor"] == i
+                if evaluado["valor"] and seleccionada:
+                    borde_opcion = MENTO_EXITO_JUEGO if i in dato["correctas"] else MENTO_ERROR_JUEGO
+                elif seleccionada:
+                    borde_opcion = _mento_ui_paleta(categoria_clave)["boton"] if _mento_ui_paleta(categoria_clave) else "#76BEC1"
                 else:
-                    color = MENTO_AMARILLO_CLARO
+                    borde_opcion = "#FFFFFF"
 
                 opciones_controles.append(
                     ft.Container(
                         content=ft.Text(
                             texto,
-                            color=ft.Colors.WHITE,
+                            color="#202020",
                             text_align=ft.TextAlign.CENTER,
                             font_family=MENTO_FUENTE,
                             size=14,
                         ),
-                        padding=14,
-                        border_radius=14,
-                        bgcolor=color,
+                        padding=16,
+                        border_radius=20,
+                        bgcolor=ft.Colors.WHITE,
+                        border=ft.border.all(3 if seleccionada else 1, borde_opcion),
                         width=ancho_campo(),
                         on_click=elegir_opcion(i),
                     )
@@ -3309,7 +3349,7 @@ def main(page: ft.Page):
                 ft.Text(
                     f"✨ NIVEL {nivel_mostrado} — {cat['nombre']}",
                     weight=ft.FontWeight.BOLD,
-                    color=MENTO_ROSA_TEXTO,
+                    color=(_mento_ui_paleta(categoria_clave) or {}).get("boton", MENTO_ROSA_TEXTO),
                     font_family=MENTO_FUENTE,
                 ),
 
@@ -3328,21 +3368,11 @@ def main(page: ft.Page):
                     text_align=ft.TextAlign.CENTER,
                 ),
 
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Text(
-                                texto,
-                                text_align=ft.TextAlign.CENTER,
-                                color=COLOR_TEXTO_FUERTE,
-                            )
-                            for texto in dato["escenario"]
-                        ],
-                        spacing=6,
-                    ),
-                    padding=15,
-                    border_radius=12,
-                    bgcolor=MENTO_AMARILLO,
+                ft.Column(
+                    [ft.Text(texto, text_align=ft.TextAlign.CENTER, color="#242424", size=15)
+                     for texto in dato["escenario"]],
+                    spacing=8,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     width=ancho_campo(),
                 ),
 
@@ -3652,7 +3682,8 @@ def main(page: ft.Page):
     # MODO TEXTO LIBRE — Tutorial
     # ==========================================================
 
-    def mostrar_tutorial_texto_libre(categoria=None):        
+    def mostrar_tutorial_texto_libre(categoria=None):
+        _mento_ui_activar_categoria(categoria or estado.get("_tl_categoria_actual", "familia"))
         """
         Tutorial progresivo del Modo Escritura.
         Muestra cada parte del ejemplo paso a paso.
@@ -5556,6 +5587,7 @@ def main(page: ft.Page):
     # ==========================================================
 
     def mostrar_escritura_bloques(categoria_clave):
+        _mento_ui_activar_categoria(categoria_clave)
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
 
         # Cargar sesiones desde Supabase o estado local
@@ -5586,7 +5618,7 @@ def main(page: ft.Page):
                     ),
                     padding=16,
                     border_radius=12,
-                    bgcolor=COLOR_CAJA_SUAVE,
+                    bgcolor=ft.Colors.WHITE,
                     width=ancho_campo(),
                 )
             )
@@ -5671,7 +5703,7 @@ def main(page: ft.Page):
                         ),
                         padding=12,
                         border_radius=14,
-                        bgcolor=COLOR_CAJA_SUAVE,
+                        bgcolor=ft.Colors.WHITE,
                         width=ancho_campo(),
                     )
                 )
@@ -5727,6 +5759,7 @@ def main(page: ft.Page):
 
 
     def mostrar_reappraisal_juegos_niveles(categoria_clave):
+        _mento_ui_activar_categoria(categoria_clave)
 
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
 
@@ -5758,7 +5791,7 @@ def main(page: ft.Page):
                     ),
                     padding=16,
                     border_radius=12,
-                    bgcolor=COLOR_CAJA_SUAVE,
+                    bgcolor=ft.Colors.WHITE,
                     width=ancho_campo(),
                 )
             )
@@ -5816,7 +5849,7 @@ def main(page: ft.Page):
                         ),
                         padding=12,
                         border_radius=14,
-                        bgcolor=COLOR_CAJA_SUAVE,
+                        bgcolor=ft.Colors.WHITE,
                         width=ancho_campo(),
                     )
                 )
@@ -5885,6 +5918,7 @@ def main(page: ft.Page):
 
 
     def mostrar_reappraisal_juego_nivel(categoria_clave, nivel):
+        _mento_ui_activar_categoria(categoria_clave)
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
         dato = MENTO_NIVELES[categoria_clave][nivel - 1]
 
@@ -6204,6 +6238,7 @@ def main(page: ft.Page):
         renderizar()
 
     def mostrar_reappraisal_juego_completado(categoria_clave, nivel):
+        _mento_ui_activar_categoria(categoria_clave)
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
         niveles = MENTO_NIVELES[categoria_clave]
         hay_siguiente = nivel < len(niveles)
@@ -8162,7 +8197,7 @@ def main(page: ft.Page):
                     padding=8,
                     border_radius=12,
                     bgcolor=COLOR_CAJA_INFO if es_actual else COLOR_CAJA_SUAVE,
-                    border=ft.Border.all(2, COLOR_PRIMARIO) if es_actual else None,
+                    border=ft.border.all(2, COLOR_PRIMARIO) if es_actual else None,
                     width=76,
                     on_click=elegir(item["emoji"]),
                 )
@@ -8220,7 +8255,7 @@ def main(page: ft.Page):
                 height=44,
                 border_radius=22,
                 bgcolor=c["hex"],
-                border=ft.Border.all(3, COLOR_PRIMARIO) if es_actual else ft.Border.all(1, COLOR_TEXTO_SUAVE),
+                border=ft.border.all(3, COLOR_PRIMARIO) if es_actual else ft.border.all(1, COLOR_TEXTO_SUAVE),
                 alignment=ft.Alignment.CENTER,
                 opacity=1.0 if desbloqueado_color else 0.45,
                 on_click=elegir_color(c["hex"]) if desbloqueado_color else None,
@@ -8473,7 +8508,7 @@ def main(page: ft.Page):
                         padding=16 if en_flor else 12,
                         border_radius=12,
                         bgcolor=COLOR_EXITO_CAJA if en_flor else COLOR_CAJA_SUAVE,
-                        border=ft.Border.all(2, COLOR_EXITO) if en_flor else None,
+                        border=ft.border.all(2, COLOR_EXITO) if en_flor else None,
                         width=ancho_campo(),
                         on_click=abrir,
                     )
@@ -8908,7 +8943,7 @@ def main(page: ft.Page):
                     padding=15,
                     border_radius=12,
                     bgcolor=COLOR_EXITO_CAJA if en_flor else COLOR_CAJA_SUAVE,
-                    border=ft.Border.all(2, COLOR_EXITO) if en_flor else None,
+                    border=ft.border.all(2, COLOR_EXITO) if en_flor else None,
                     width=ancho_campo(),
                     on_click=abrir,
                 )
