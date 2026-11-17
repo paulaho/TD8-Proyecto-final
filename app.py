@@ -1,3 +1,17 @@
+import base64
+from pathlib import Path
+
+
+def _imagen_mento_data_uri(nombre):
+    """Devuelve un data URI PNG para ft.Image(src=...), sin rutas de assets."""
+    ruta = Path(__file__).resolve().parent / "assets" / nombre
+    try:
+        contenido = base64.b64encode(ruta.read_bytes()).decode("ascii")
+        return "data:image/png;base64," + contenido
+    except OSError as error:
+        print(f"No se pudo cargar {ruta}: {error}")
+        return ""
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -54,16 +68,16 @@ from dre.tema import (
 # Se definen aquí para no requerir cambios en dre/tema.py.
 COLOR_FONDO = "#FFFFFF"
 COLOR_TARJETA = "#FFFFFF"
-COLOR_PRIMARIO = "#F18B9B"
-COLOR_PRIMARIO_OSCURO = "#E77388"
+COLOR_PRIMARIO = "#E95F83"
+COLOR_PRIMARIO_OSCURO = "#D94B71"
 COLOR_CAJA_SUAVE = "#FFFFFF"
 COLOR_CAJA_INFO = "#FFFFFF"
 COLOR_DORADO = "#F6B9C3"
 COLOR_TEXTO_FUERTE = "#202020"
 COLOR_TEXTO_MEDIO = "#555555"
 COLOR_TEXTO_SUAVE = "#777777"
-MENTO_ROSA = "#F18B9B"
-MENTO_ROSA_TEXTO = "#E77388"
+MENTO_ROSA = "#E95F83"
+MENTO_ROSA_TEXTO = "#D94B71"
 MENTO_AMARILLO_CLARO = "#FFFFFF"
 MENTO_CELESTE_CAJA = "#FFFFFF"
 
@@ -239,6 +253,17 @@ from dre.supabase_meditaciones import (
 import flet_audio as fta
 
 import flet as ft
+
+def _borde_uniforme(ancho, color):
+    """Borde en los cuatro lados compatible con Flet 0.80."""
+    return ft.Border(
+        left=ft.BorderSide(width=ancho, color=color),
+        top=ft.BorderSide(width=ancho, color=color),
+        right=ft.BorderSide(width=ancho, color=color),
+        bottom=ft.BorderSide(width=ancho, color=color),
+    )
+
+
 import requests
 import os
 import time
@@ -717,7 +742,9 @@ def main(page: ft.Page):
     def _mento_ui_salir_categoria():
         estado.pop("_ui_categoria_activa", None)
 
-    def pantalla(*controles, mostrar_volver=True, decoraciones=None, accion_volver=None):
+    COLOR_BOTONES_SUPERIORES = "#9B9B9B"
+
+    def pantalla(*controles, mostrar_volver=True, decoraciones=None, accion_volver=None, modo_inicio=False):
         # decoraciones: lista opcional de controles ya posicionados
         # (left/top/right/bottom) que se dibujan DETRÁS del contenido,
         # como empapelado de la tarjeta — hoy lo usa solo el menú
@@ -730,31 +757,71 @@ def main(page: ft.Page):
         for control in controles:
             ajustar_genero_controles(control)
 
-        filas = []
-        if mostrar_volver and (len(historial) > 1 or accion_volver is not None):
-            filas.append(
-                ft.Row(
-                    [
-                        ft.IconButton(
-                            icon=ft.Icons.ARROW_BACK,
-                            tooltip="Volver",
-                            on_click=accion_volver or volver,
-                            icon_color=ft.Colors.WHITE,
-                            bgcolor=COLOR_PRIMARIO,
-                        )
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                )
-            )
-        filas.extend(controles)
+        # Inicio conserva su composición original, sin barra ni scroll agregado.
+        controles_visibles = list(controles)
+        if controles_visibles and isinstance(controles_visibles[0], ft.Icon):
+            controles_visibles.pop(0)
 
+        # Algunas pantallas ya incluyen una fila propia de ayuda. Quitarla
+        # para evitar el icono duplicado y fuera de posición.
+        def es_fila_ayuda(control):
+            if not isinstance(control, ft.Row) or len(control.controls) != 1:
+                return False
+            boton = control.controls[0]
+            return isinstance(boton, ft.IconButton) and getattr(boton, "icon", None) == ft.Icons.HELP_OUTLINE
+
+        if not modo_inicio:
+            controles_visibles = [c for c in controles_visibles if not es_fila_ayuda(c)]
+
+        # El encabezado del inicio ocupa la misma coordenada superior que
+        # la barra de navegación del resto de las pantallas.
+        encabezado_inicio = controles_visibles.pop(0) if modo_inicio and controles_visibles else None
         columna = ft.Column(
-            filas,
+            controles_visibles,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=15,
-            scroll=ft.ScrollMode.AUTO,
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=12 if modo_inicio else 15,
+            scroll=ft.ScrollMode.AUTO if not modo_inicio else None,
             expand=True,
         )
+
+        if modo_inicio:
+            columna = ft.Stack(
+                [
+                    ft.Container(content=columna, left=0, right=0, top=62, bottom=10),
+                    ft.Container(content=encabezado_inicio, left=0, right=0, top=0),
+                ],
+                expand=True,
+            )
+
+        if not modo_inicio:
+            hay_volver = mostrar_volver and (len(historial) > 1 or accion_volver is not None)
+            barra_superior = ft.Row(
+                [
+                    ft.IconButton(
+                        icon=ft.Icons.ARROW_BACK, tooltip="Volver",
+                        on_click=accion_volver or volver,
+                        icon_color=COLOR_BOTONES_SUPERIORES, bgcolor=ft.Colors.TRANSPARENT,
+                        icon_size=25, width=48, height=48,
+                    ) if hay_volver else ft.Container(width=48, height=48),
+                    ft.Container(expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.HELP_OUTLINE, tooltip="Ayuda",
+                        on_click=lambda _: ir_a(lambda: mostrar_instrucciones(
+                            0, PAGINAS_INSTRUCCIONES_COMPLETAS, permitir_volver=True)),
+                        icon_color=COLOR_BOTONES_SUPERIORES, bgcolor=ft.Colors.TRANSPARENT,
+                        icon_size=25, width=48, height=48,
+                    ) if hay_volver else ft.Container(width=48, height=48),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            )
+            columna = ft.Stack(
+                [
+                    ft.Container(content=columna, left=0, top=0, right=0, bottom=45),
+                    ft.Container(content=barra_superior, left=0, right=0, top=0),
+                ],
+                expand=True,
+            )
 
         if decoraciones:
             # El contenido va anclado a los 4 bordes para ocupar toda la
@@ -835,8 +902,7 @@ def main(page: ft.Page):
             ir_a(mostrar_menu_principal)
 
     def finalizar_test_inicial():
-        page.run_task(precargar_batch_ia)
-        page.run_task(precargar_batches_texto_libre)
+        page.run_task(precargar_ia_inicial_ordenada)
         ir_a_menu_principal()
 
     def completar_extras_perfil():
@@ -886,8 +952,7 @@ def main(page: ft.Page):
 
         # Precargar IA apenas entra el usuario, si ya completó el test inicial
         if estado["realizo_test_inicial"]:
-            page.run_task(precargar_batch_ia)
-            page.run_task(precargar_batches_texto_libre)
+            page.run_task(precargar_ia_inicial_ordenada)
 
         historial.clear()
 
@@ -1015,10 +1080,10 @@ def main(page: ft.Page):
 
             entrar_con_usuario(usuario)
 
-        input_email = ft.TextField(label="Usuario (email)", width=ancho_campo(), keyboard_type=ft.KeyboardType.EMAIL)
-        input_contrasena = ft.TextField(label="Contraseña", width=ancho_campo(), password=True, can_reveal_password=True)
+        input_email = ft.TextField(label="Usuario (email)", width=ancho_campo(), keyboard_type=ft.KeyboardType.EMAIL, border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
+        input_contrasena = ft.TextField(label="Contraseña", width=ancho_campo(), password=True, can_reveal_password=True, border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
-        boton_ingresar = ft.ElevatedButton("Ingresar", on_click=iniciar_sesion, width=ancho_campo(), height=50)
+        boton_ingresar = ft.ElevatedButton("Ingresar", on_click=iniciar_sesion, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24)))
 
         controles = [
             ft.Icon(ft.Icons.SELF_IMPROVEMENT, size=50, color=COLOR_PRIMARIO),
@@ -1050,7 +1115,7 @@ def main(page: ft.Page):
                     on_click=iniciar_con_google,
                     width=ancho_campo(),
                     height=50,
-                )
+                style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24)))
             )
             controles.append(ft.Text("— o —", color=COLOR_TEXTO_SUAVE))
 
@@ -1081,9 +1146,9 @@ def main(page: ft.Page):
     # de dejarla en un callejón sin salida.
     # ==========================================================
     def mostrar_recuperar_paso1():
-        input_email = ft.TextField(label="Tu email", width=ancho_campo(), keyboard_type=ft.KeyboardType.EMAIL)
+        input_email = ft.TextField(label="Tu email", width=ancho_campo(), keyboard_type=ft.KeyboardType.EMAIL, border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
-        boton_continuar = ft.ElevatedButton("Continuar", width=ancho_campo(), height=50)
+        boton_continuar = ft.ElevatedButton("Continuar", width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24)))
 
         def continuar(e):
             email = (input_email.value or "").strip().lower()
@@ -1133,7 +1198,7 @@ def main(page: ft.Page):
         )
 
     def mostrar_recuperar_paso2(usuario):
-        input_respuesta = ft.TextField(label="Tu respuesta", width=ancho_campo())
+        input_respuesta = ft.TextField(label="Tu respuesta", width=ancho_campo(), border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
 
         def continuar(e):
@@ -1154,15 +1219,15 @@ def main(page: ft.Page):
             ft.Text(usuario["pregunta_seguridad"], color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
             input_respuesta,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.TextButton("Volver a iniciar sesión", on_click=lambda _: ir_a(mostrar_login)),
             mostrar_volver=False,
         )
 
     def mostrar_recuperar_paso3(usuario):
-        input_nueva = ft.TextField(label="Nueva contraseña", width=ancho_campo(), password=True, can_reveal_password=True)
+        input_nueva = ft.TextField(label="Nueva contraseña", width=ancho_campo(), password=True, can_reveal_password=True, border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
-        boton_guardar = ft.ElevatedButton("Guardar nueva contraseña", width=ancho_campo(), height=50)
+        boton_guardar = ft.ElevatedButton("Guardar nueva contraseña", width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24)))
 
         def guardar(e):
             nueva = input_nueva.value or ""
@@ -1207,7 +1272,7 @@ def main(page: ft.Page):
                 color=COLOR_TEXTO_MEDIO,
                 text_align=ft.TextAlign.CENTER,
             ),
-            ft.ElevatedButton("Ir a iniciar sesión", on_click=lambda _: ir_a(mostrar_login), width=ancho_campo(), height=50),
+            ft.ElevatedButton("Ir a iniciar sesión", on_click=lambda _: ir_a(mostrar_login), width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             mostrar_volver=False,
         )
 
@@ -1268,31 +1333,31 @@ def main(page: ft.Page):
         print("ENTRANDO A MOSTRAR PERFIL")
         es_primera_vez = not estado["nombre"]
 
-        input_nombre = ft.TextField(label="Nombre", value=estado["nombre"], width=ancho_campo())
+        input_nombre = ft.TextField(label="Nombre", value=estado["nombre"], width=ancho_campo(), border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         input_edad = ft.TextField(
             label="Edad",
             value=str(estado["edad"]) if estado["edad"] is not None else "",
             width=ancho_campo(),
             keyboard_type=ft.KeyboardType.NUMBER,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         dropdown_genero = ft.Dropdown(
             label="Género (opcional)",
             options=[ft.dropdown.Option(op) for op in OPCIONES_GENERO],
             value=estado["genero"] or None,
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         dropdown_tratamiento = ft.Dropdown(
             label="¿Estás en tratamiento con un psicólogo/a o psiquiatra? (opcional)",
             options=[ft.dropdown.Option(op) for op in OPCIONES_TRATAMIENTO],
             value=estado["en_tratamiento"] or None,
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         dropdown_pregunta_seguridad = ft.Dropdown(
             label="Pregunta de seguridad (para recuperar tu cuenta)",
             options=[ft.dropdown.Option(op) for op in PREGUNTAS_SEGURIDAD],
             value=estado.get("pregunta_seguridad") or None,
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         input_respuesta_seguridad = ft.TextField(
             label="Tu respuesta",
             hint_text=(
@@ -1301,7 +1366,7 @@ def main(page: ft.Page):
                 else "La vamos a usar solo si algún día te olvidás la contraseña"
             ),
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
 
         def guardar(e):
@@ -1360,7 +1425,7 @@ def main(page: ft.Page):
             historial.clear()
             ir_a_menu_principal()
 
-        boton_guardar = ft.ElevatedButton("Guardar", on_click=guardar, width=ancho_campo(), height=50)
+        boton_guardar = ft.ElevatedButton("Guardar", on_click=guardar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24)))
 
         controles = [ft.Text("Contanos un poco sobre vos" if es_primera_vez else "Mi perfil", size=24, weight=ft.FontWeight.BOLD)]
         if es_primera_vez:
@@ -1385,7 +1450,7 @@ def main(page: ft.Page):
                     icon=ft.Icons.PALETTE_OUTLINED,
                     on_click=lambda _: ir_a(mostrar_personalizacion),
                     width=ancho_campo(),
-                    height=45,
+                    height=50,
                 )
             )
 
@@ -1415,13 +1480,13 @@ def main(page: ft.Page):
     PAGINAS_INSTRUCCIONES_INICIALES = [
         {
             "icono": ft.Icons.WAVING_HAND_OUTLINED,
-            "color": "#F18B9B",
+            "color": "#E95F83",
             "titulo": "¡Bienvenido/a!",
             "texto": "Este es un espacio para reflexionar sobre pensamientos, emociones o situaciones que te generen malestar. Podés empezar un registro y retomarlo cuando quieras, incluso días después.",
         },
         {
             "icono": ft.Icons.FAVORITE_BORDER,
-            "color": COLOR_EXITO,
+            "color": COLOR_PRIMARIO,
             "titulo": "Privado y seguro",
             "texto": "Todo lo que registrás acá es privado: solo vos podés verlo con tu cuenta. La única forma de compartirlo con otra persona es que vos mismo/a decidas descargar o enviar tu planilla desde \"Compartir mi evolución\". DRE no reemplaza la atención de un profesional de salud mental — el botón \"Necesito ayuda ahora\" está siempre disponible si lo necesitás.",
         },
@@ -1471,12 +1536,12 @@ def main(page: ft.Page):
         puntos = ft.Row(
             [
                 ft.Container(
-                    width=9,
-                    height=9,
+                    width=10,
+                    height=10,
                     border_radius=5,
-                    bgcolor=COLOR_PRIMARIO if i == pagina else COLOR_CAJA_SUAVE,
+                    bgcolor=COLOR_BOTONES_SUPERIORES if i == pagina else "#BFC0C3",
                 )
-                for i in range(len(paginas))
+                for i in range(max(3, len(paginas)))
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=8,
@@ -1490,15 +1555,16 @@ def main(page: ft.Page):
         if pagina > 0:
             botones.append(ft.OutlinedButton("Atrás", on_click=ir_a_pagina(pagina - 1), height=50, expand=True))
         botones.append(
-            ft.ElevatedButton("Empezar" if es_ultima else "Siguiente", on_click=terminar if es_ultima else ir_a_pagina(pagina + 1), height=50, expand=True, style=ft.ButtonStyle(bgcolor="#F18B9B", color=ft.Colors.WHITE))
+            ft.ElevatedButton("Empezar" if es_ultima else "Siguiente", on_click=terminar if es_ultima else ir_a_pagina(pagina + 1), height=50, expand=True, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE))
         )
 
         pantalla(
-            ft.Icon(contenido["icono"], size=54, color=contenido["color"]),
+            *([ft.Image(src=_imagen_mento_data_uri("gatito_bienvenida.png"), width=245, height=210, fit="contain")] if pagina == 0 and paginas is PAGINAS_INSTRUCCIONES_INICIALES else []),
             ft.Text(contenido["titulo"], size=26, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             ft.Text(contenido["texto"], size=16, color=COLOR_TEXTO_FUERTE, text_align=ft.TextAlign.CENTER),
             puntos,
             ft.Row(botones, alignment=ft.MainAxisAlignment.CENTER, spacing=12, width=ancho_campo()),
+            ft.Container(height=75) if pagina == 0 and paginas is PAGINAS_INSTRUCCIONES_INICIALES else ft.Container(height=0),
             # La flechita de volver (arriba a la izquierda) solo se
             # muestra en la página 1 cuando se abrió a mano: ahí es la
             # única forma de salir sin avanzar. En las páginas
@@ -1685,13 +1751,15 @@ def main(page: ft.Page):
                     "Consejos",
                     icon=ft.Icons.MENU_BOOK,
                     on_click=lambda _: ir_a(mostrar_consejos_biblioteca),
-                    style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=COLOR_PRIMARIO),
+                    style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=COLOR_BOTONES_SUPERIORES),
                 ),
-                ft.Text(
-                    f"🔥 {racha_vigente()}",
-                    size=20,
-                    weight=ft.FontWeight.BOLD,
-                    color=COLOR_TEXTO_FUERTE,
+                ft.Row(
+                    [
+                        ft.Image(src=_imagen_mento_data_uri("racha_fuego.png"), width=25, height=25, fit=ft.BoxFit.CONTAIN),
+                        ft.Text(str(racha_vigente()), size=20, weight=ft.FontWeight.BOLD, color=COLOR_TEXTO_FUERTE),
+                    ],
+                    spacing=4,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Row(
                     [
@@ -1699,22 +1767,25 @@ def main(page: ft.Page):
                             icon=ft.Icons.HELP_OUTLINE,
                             tooltip="Instrucciones",
                             on_click=lambda _: ir_a(lambda: mostrar_instrucciones(0, PAGINAS_INSTRUCCIONES_COMPLETAS, permitir_volver=True)),
-                            icon_color=ft.Colors.WHITE,
-                            bgcolor="#F18B9B",
+                            icon_color=COLOR_BOTONES_SUPERIORES,
+                            bgcolor=ft.Colors.TRANSPARENT,
+                            icon_size=25, width=48, height=48,
                         ),
                         ft.IconButton(
                             icon=ft.Icons.LOCAL_FLORIST,
                             tooltip="Tu jardín",
                             on_click=lambda _: ir_a(mostrar_jardin),
-                            icon_color=ft.Colors.WHITE,
-                            bgcolor="#F18B9B",
+                            icon_color=COLOR_BOTONES_SUPERIORES,
+                            bgcolor=ft.Colors.TRANSPARENT,
+                            icon_size=25, width=48, height=48,
                         ),
                         ft.IconButton(
                             icon=ft.Icons.PERSON,
                             tooltip="Mi perfil",
                             on_click=lambda e: (print("CLICK PERFIL"), mostrar_perfil()),
-                            icon_color=ft.Colors.WHITE,
-                            bgcolor="#F18B9B",
+                            icon_color=COLOR_BOTONES_SUPERIORES,
+                            bgcolor=ft.Colors.TRANSPARENT,
+                            icon_size=25, width=48, height=48,
                         ),
                     ],
                     spacing=8,
@@ -1726,14 +1797,17 @@ def main(page: ft.Page):
 
         racha = racha_vigente()
         if racha == 0:
-            texto_racha = "🔥 Completá un ejercicio hoy para empezar tu racha"
+            texto_racha = "Completá un ejercicio hoy para empezar tu racha"
         elif jugo_hoy():
-            texto_racha = f"🔥 Racha: {racha} día{'s' if racha != 1 else ''}"
+            texto_racha = f"Racha: {racha} día{'s' if racha != 1 else ''}"
         else:
-            texto_racha = f"🔥 Racha: {racha} día{'s' if racha != 1 else ''} · jugá hoy para no perderla"
+            texto_racha = f"Racha: {racha} día{'s' if racha != 1 else ''} · jugá hoy para no perderla"
 
         tarjeta_racha = ft.Container(
-            content=ft.Text(texto_racha, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            content=ft.Row([
+                ft.Image(src=_imagen_mento_data_uri("racha_fuego.png"), width=22, height=22, fit=ft.BoxFit.CONTAIN),
+                ft.Text(texto_racha, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
             padding=12,
             border_radius=12,
             bgcolor="#FFFFFF",
@@ -1743,98 +1817,86 @@ def main(page: ft.Page):
         pantalla(
             encabezado,
             
-            ft.Text(f"Hola, {estado['nombre']}!", size=24, weight=ft.FontWeight.BOLD, color="#171717"),
-            ft.Text("¿Cómo querés usar este espacio hoy?", color=COLOR_TEXTO_MEDIO),
+            ft.Row([ft.Text(f"Hola, {estado['nombre']}!", size=24, weight=ft.FontWeight.BOLD, color="#171717")], alignment=ft.MainAxisAlignment.START, width=ancho_campo()),
+            ft.Row([ft.Text("¿Cómo querés usar este espacio hoy?", color=COLOR_TEXTO_MEDIO)], alignment=ft.MainAxisAlignment.START, width=ancho_campo()),
             tarjeta_apoyo,
-            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-            # Ítem principal: Entrená tu mente (más grande y destacado)
+            ft.Divider(height=0, color=ft.Colors.TRANSPARENT),
+            # Tarjetas con el texto a la izquierda y los gatitos recortados
+            # a la derecha, siguiendo la composición de Figma.
             ft.Container(
-                content=ft.Row(
+                content=ft.Stack(
                     [
-                        ft.Text("🐱🏋️", size=34),
-                        ft.Column(
-                            [
-                                ft.Text(
-                                    NOMBRE_SECCION_JUEGOS,
-                                    color=ft.Colors.WHITE,
-                                    size=20,
-                                    weight=ft.FontWeight.BOLD,
-                                    font_family=MENTO_FUENTE,
-                                ),
-                                ft.Text(
-                                    SUBTITULO_SECCION_JUEGOS,
-                                    color=ft.Colors.with_opacity(0.88, ft.Colors.WHITE),
-                                    size=12,
-                                ),
-                            ],
-                            spacing=2,
-                            expand=True,
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text(NOMBRE_SECCION_JUEGOS, color=ft.Colors.WHITE,
+                                            size=21, weight=ft.FontWeight.BOLD,
+                                            font_family=MENTO_FUENTE),
+                                    ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.WHITE, size=23),
+                                ], spacing=5,
+                            ), left=16, top=12, right=155,
                         ),
-                        ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.WHITE, size=22),
-                    ],
-                    spacing=14,
-                    alignment=ft.MainAxisAlignment.START,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ft.Container(
+                            content=ft.Image(src=_imagen_mento_data_uri("gatito_entrena.png"),
+                                             width=160, height=126, fit="contain"),
+                            right=8, bottom=-1,
+                        ),
+                    ], height=126,
                 ),
-                padding=ft.Padding.symmetric(horizontal=18, vertical=16),
-                border_radius=22,
-                bgcolor="#76C0C3",
-                width=ancho_campo(),
+                border_radius=22, bgcolor="#59BFC4", width=ancho_campo(),
+                clip_behavior=ft.ClipBehavior.HARD_EDGE,
                 on_click=lambda _: ir_a(mostrar_reappraisal),
             ),
-            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
-            # Ítem destacado: Meditación
+            ft.Divider(height=0, color=ft.Colors.TRANSPARENT),
             ft.Container(
-                content=ft.Row(
+                content=ft.Stack(
                     [
-                        ft.Text("🐱💗", size=34),
-                        ft.Column(
-                            [
-                                ft.Text(
-                                    NOMBRE_SECCION_MEDITACION,
-                                    color=ft.Colors.WHITE,
-                                    size=20,
-                                    weight=ft.FontWeight.BOLD,
-                                    font_family=MENTO_FUENTE,
-                                ),
-                                ft.Text(
-                                    SUBTITULO_SECCION_MEDITACION,
-                                    color=ft.Colors.with_opacity(0.88, ft.Colors.WHITE),
-                                    size=12,
-                                ),
-                            ],
-                            spacing=2,
-                            expand=True,
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text(NOMBRE_SECCION_MEDITACION, color=ft.Colors.WHITE,
+                                            size=21, weight=ft.FontWeight.BOLD,
+                                            font_family=MENTO_FUENTE),
+                                    ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.WHITE, size=23),
+                                ], spacing=5,
+                            ), left=16, top=12, right=155,
                         ),
-                        ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.WHITE, size=22),
-                    ],
-                    spacing=14,
-                    alignment=ft.MainAxisAlignment.START,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ft.Container(
+                            content=ft.Image(src=_imagen_mento_data_uri("gatito_meditacion.png"),
+                                             width=115, height=96, fit="contain"),
+                            right=28, bottom=-1,
+                        ),
+                    ], height=126,
                 ),
-                padding=ft.Padding.symmetric(horizontal=18, vertical=16),
-                border_radius=22,
-                bgcolor="#6CA7E4",
-                width=ancho_campo(),
+                border_radius=22, bgcolor="#5EA8E6", width=ancho_campo(),
+                clip_behavior=ft.ClipBehavior.HARD_EDGE,
                 on_click=lambda _: ir_a(mostrar_menu_meditacion),
             ),
-            ft.Divider(height=6, color=ft.Colors.TRANSPARENT),
+            ft.Divider(height=0, color=ft.Colors.TRANSPARENT),
             # Ítems secundarios
             ft.Button(
                 "Trabajo emocional",
-                icon=ft.Icons.SELF_IMPROVEMENT,
                 on_click=lambda _: ir_a(mostrar_trabajo_emocional),
                 width=ancho_campo(),
                 height=50,
+                style=ft.ButtonStyle(
+                    bgcolor=COLOR_PRIMARIO,
+                    color=ft.Colors.WHITE,
+                    shape=ft.RoundedRectangleBorder(radius=25),
+                ),
             ),
             ft.Button(
                 "Autorreporte",
-                icon=ft.Icons.INSIGHTS,
                 on_click=lambda _: ir_a(mostrar_bienestar),
                 width=ancho_campo(),
                 height=50,
+                style=ft.ButtonStyle(
+                    bgcolor=COLOR_PRIMARIO,
+                    color=ft.Colors.WHITE,
+                    shape=ft.RoundedRectangleBorder(radius=25),
+                ),
             ),
-            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+            ft.Divider(height=0, color=ft.Colors.TRANSPARENT),
             # Los dos accesos "de servicio" van chicos, uno en cada
             # esquina de abajo (pedido de Gabriel). El de ayuda mantiene
             # el texto completo y el rojo para seguir siendo visible:
@@ -1854,12 +1916,24 @@ def main(page: ft.Page):
             ),
             mostrar_volver=False,
             decoraciones=decoraciones_menu,
+            modo_inicio=True,
         )
 
     # ==========================================================
     # ==========================================================
     # MEDITACIÓN (prácticas guiadas)
     # ==========================================================
+    def regresar_menu_meditacion(e=None):
+        """Regresa al menú sin dejar reproductores/sesiones en el historial."""
+        historial.clear()
+        historial.append(mostrar_menu_principal)
+        historial.append(mostrar_menu_meditacion)
+        mostrar_menu_meditacion()
+
+    def salir_meditacion_al_inicio(e=None):
+        """El botón Atrás del menú de meditación siempre vuelve al inicio."""
+        ir_a_menu_principal()
+
     def mostrar_menu_meditacion():
         page.run_task(_detener_audio_meditacion)
 
@@ -1877,7 +1951,7 @@ def main(page: ft.Page):
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.Icons.PLAY_CIRCLE_FILL, color="#E77388", size=28),
+                                ft.Icon(ft.Icons.PLAY_CIRCLE_FILL, color="#D94B71", size=28),
                                 ft.Column(
                                     [
                                         ft.Text(f"Sesión {num_s}: {tit_s}", weight=ft.FontWeight.BOLD, size=15),
@@ -1908,7 +1982,7 @@ def main(page: ft.Page):
                         [
                             ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.SPA, color="#E77388", size=26),
+                                    ft.Icon(ft.Icons.SPA, color="#D94B71", size=26),
                                     ft.Text(p["nombre"], size=18, weight=ft.FontWeight.BOLD, color=COLOR_TEXTO_FUERTE),
                                 ],
                                 spacing=8,
@@ -1945,6 +2019,7 @@ def main(page: ft.Page):
                 style=ft.ButtonStyle(color=ft.Colors.RED_700),
             ),
             mostrar_volver=True,
+            accion_volver=salir_meditacion_al_inicio,
         )
 
     def mostrar_preparacion_sesion(practica_clave, sesion_num):
@@ -1953,7 +2028,7 @@ def main(page: ft.Page):
         practica = obtener_practica(practica_clave)
         sesion = obtener_sesion(practica_clave, sesion_num)
         if not practica or not sesion:
-            ir_a(mostrar_menu_meditacion)
+            regresar_menu_meditacion()
             return
 
         pantalla(
@@ -2025,12 +2100,12 @@ def main(page: ft.Page):
         practica = obtener_practica(practica_clave)
         sesion = obtener_sesion(practica_clave, sesion_num)
         if not practica or not sesion:
-            ir_a(mostrar_menu_meditacion)
+            regresar_menu_meditacion()
             return
 
         fragmentos = sesion.get("fragmentos", [])
         if not fragmentos:
-            ir_a(mostrar_menu_meditacion)
+            regresar_menu_meditacion()
             return
 
         # Limpiar estado previo de forma SÍNCRONA (sin run_task), para que
@@ -2157,7 +2232,7 @@ def main(page: ft.Page):
 
         async def terminar_sesion(e=None):
             await _detener_audio_meditacion()
-            ir_a(mostrar_menu_meditacion)
+            regresar_menu_meditacion()
 
         async def forzar_play(e=None):
             if _meditacion_estado.get("audio_control"):
@@ -2349,8 +2424,8 @@ def main(page: ft.Page):
                     icon=ft.Icons.ARROW_BACK,
                     tooltip="Terminar sesión",
                     on_click=lambda _: page.run_task(terminar_sesion),
-                    icon_color=ft.Colors.WHITE,
-                    bgcolor=COLOR_PRIMARIO,
+                    icon_color=COLOR_BOTONES_SUPERIORES,
+                    bgcolor=ft.Colors.TRANSPARENT,
                 ),
                 ft.Text(
                     f"{practica['nombre']} · Sesión {sesion['numero']}",
@@ -2432,7 +2507,7 @@ def main(page: ft.Page):
             ft.OutlinedButton(
                 "Ver prácticas de meditación",
                 icon=ft.Icons.SPA,
-                on_click=lambda _: ir_a(mostrar_menu_meditacion),
+                on_click=regresar_menu_meditacion,
                 width=ancho_campo(),
                 height=45,
             ),
@@ -2499,7 +2574,7 @@ def main(page: ft.Page):
                     text_align=ft.TextAlign.CENTER,
                 )
             )
-        controles.append(ft.ElevatedButton("Entendido", on_click=continuar, width=ancho_campo(), height=50))
+        controles.append(ft.ElevatedButton("Entendido", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))))
         pantalla(*controles, mostrar_volver=permitir_volver)
 
     def mostrar_trabajo_emocional():
@@ -2516,8 +2591,8 @@ def main(page: ft.Page):
                         icon=ft.Icons.HELP_OUTLINE,
                         tooltip="Instrucciones",
                         on_click=lambda _: ir_a(lambda: mostrar_instrucciones_trabajo_emocional(permitir_volver=True, detallada=True)),
-                        icon_color=ft.Colors.WHITE,
-                        bgcolor=COLOR_PRIMARIO,
+                        icon_color=COLOR_BOTONES_SUPERIORES,
+                        bgcolor=ft.Colors.TRANSPARENT,
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.END,
@@ -2534,7 +2609,7 @@ def main(page: ft.Page):
                 on_click=lambda _: page.run_task(iniciar_nuevo_reporte),
                 width=ancho_campo(),
                 height=50,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton(
                 "Pensamientos que estoy trabajando",
                 icon=ft.Icons.TRACK_CHANGES,
@@ -2607,7 +2682,7 @@ def main(page: ft.Page):
                     text_align=ft.TextAlign.CENTER,
                 )
             )
-        controles.append(ft.ElevatedButton("Entendido", on_click=continuar, width=ancho_campo(), height=50))
+        controles.append(ft.ElevatedButton("Entendido", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))))
         pantalla(*controles, mostrar_volver=permitir_volver)
 
     def mostrar_reappraisal():
@@ -2627,8 +2702,8 @@ def main(page: ft.Page):
                         icon=ft.Icons.HELP_OUTLINE,
                         tooltip="Instrucciones",
                         on_click=lambda _: ir_a(lambda: mostrar_instrucciones_reappraisal(permitir_volver=True, detallada=True)),
-                        icon_color=ft.Colors.WHITE,
-                        bgcolor=COLOR_PRIMARIO,
+                        icon_color=COLOR_BOTONES_SUPERIORES,
+                        bgcolor=ft.Colors.TRANSPARENT,
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.END,
@@ -2670,7 +2745,7 @@ def main(page: ft.Page):
                 ),
                 padding=ft.Padding.symmetric(horizontal=16, vertical=14),
                 border_radius=22,
-                bgcolor="#F18B9B",
+                bgcolor="#E95F83",
                 width=ancho_campo(),
                 on_click=lambda _: ir_a(lambda: mostrar_reappraisal_juegos_categorias(juego="escritura")),
             ),
@@ -2759,7 +2834,7 @@ def main(page: ft.Page):
         pantalla(
             ft.Text("Situaciones inventadas", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             ft.Text("¿Cómo elegís la situación para practicar?", color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
-            ft.ElevatedButton("Sugerime una situación", icon=ft.Icons.SHUFFLE, on_click=sugerir, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Sugerime una situación", icon=ft.Icons.SHUFFLE, on_click=sugerir, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton(
                 "Elegir de un menú",
                 icon=ft.Icons.LIST,
@@ -2807,7 +2882,7 @@ def main(page: ft.Page):
                 on_click=lambda _: ir_a(mostrar_reappraisal_elegir_tema),
                 width=ancho_campo(),
                 height=50,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton(
                 "Describir una situación nueva",
                 icon=ft.Icons.EDIT_NOTE,
@@ -2870,7 +2945,7 @@ def main(page: ft.Page):
             min_lines=3,
             max_lines=6,
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
 
         def continuar(e):
@@ -2890,7 +2965,7 @@ def main(page: ft.Page):
             ft.Text("Describí tu situación", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             input_situacion,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def mostrar_reappraisal_ejercicio(modo, categoria, situacion_texto, pensamiento_sugerido=None, tema_id=None):
@@ -2912,7 +2987,7 @@ def main(page: ft.Page):
             min_lines=2,
             max_lines=4,
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         # El objetivo de este paso es separar los HECHOS observables de
         # la INTERPRETACIÓN (el pensamiento del paso anterior es una
         # interpretación, no un hecho). La explicación con el ejemplo va
@@ -2933,7 +3008,7 @@ def main(page: ft.Page):
             min_lines=1,
             max_lines=4,
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         # De los 2 pasos de distanciamiento (mirada de un tercero y
         # mirada a un año) alcanza con completar UNO: los dos entrenan lo
         # mismo (tomar distancia del pensamiento) por caminos distintos,
@@ -2946,7 +3021,7 @@ def main(page: ft.Page):
             min_lines=1,
             max_lines=4,
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         input_temporal = ft.TextField(
             label="Dentro de un año, ¿cuánto va a pesar esto y cómo se va a ver?",
             hint_text="Completá esta, la de arriba, o las dos",
@@ -2954,7 +3029,7 @@ def main(page: ft.Page):
             min_lines=1,
             max_lines=4,
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
 
         def guardar(e):
@@ -3020,7 +3095,7 @@ def main(page: ft.Page):
                 input_tercero,
                 input_temporal,
                 texto_error,
-                ft.ElevatedButton("Guardar ejercicio", on_click=guardar, width=ancho_campo(), height=50),
+                ft.ElevatedButton("Guardar ejercicio", on_click=guardar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ]
         )
         pantalla(*controles)
@@ -3040,7 +3115,7 @@ def main(page: ft.Page):
                 text_align=ft.TextAlign.CENTER,
             ),
             *controles_recompensa("✨ Tu colección de enseñanzas creció con este ejercicio."),
-            ft.ElevatedButton("Volver", on_click=volver_al_menu_reappraisal, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Volver", on_click=volver_al_menu_reappraisal, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             mostrar_volver=False,
         )
 
@@ -3135,6 +3210,19 @@ def main(page: ft.Page):
         )
 
 
+    async def precargar_ia_inicial_ordenada():
+        """Evita competir por Gemini entre las dos precargas iniciales."""
+        if estado.get("_precarga_inicial_ordenada_en_curso"):
+            return
+        estado["_precarga_inicial_ordenada_en_curso"] = True
+        try:
+            await precargar_batch_ia("familia")
+            # Si el usuario abre el juego durante la precarga, el juego
+            # reutiliza el batch o espera a que termine (ver abrir_proximo_nivel).
+            await precargar_batches_texto_libre("familia")
+        finally:
+            estado["_precarga_inicial_ordenada_en_curso"] = False
+
     async def precargar_batch_ia(categoria="familia"):
 
         batches = estado.setdefault("_niveles_ia_por_categoria", {})
@@ -3196,7 +3284,19 @@ def main(page: ft.Page):
             generando[categoria] = False
 
     async def mostrar_reappraisal_generando_ia(categoria="familia"):
-
+        generando = estado.setdefault("_batch_ia_generando_por_categoria", {})
+        batches = estado.setdefault("_niveles_ia_por_categoria", {})
+        if batches.get(categoria):
+            mostrar_reappraisal_juego_ia(categoria, 0)
+            return
+        if generando.get(categoria):
+            pantalla(ft.ProgressRing(), ft.Text("Esperando niveles IA...", text_align=ft.TextAlign.CENTER))
+            while generando.get(categoria):
+                await asyncio.sleep(0.2)
+            if batches.get(categoria):
+                mostrar_reappraisal_juego_ia(categoria, 0)
+                return
+        generando[categoria] = True
         pantalla(
             ft.ProgressRing(),
             ft.Text("Generando niveles IA...", text_align=ft.TextAlign.CENTER),
@@ -3220,16 +3320,24 @@ def main(page: ft.Page):
                     categoria,
                 )
 
-            estado.setdefault("_niveles_ia_por_categoria", {})[categoria] = niveles
-
+            batches[categoria] = niveles
             mostrar_reappraisal_juego_ia(categoria, 0)
 
         except Exception as e:
-            print(f"Error generando IA ({categoria}):", repr(e))
+            import traceback
+            traceback.print_exc()
+            print(f"Error generando IA ({categoria}): {type(e).__name__}: {e}", flush=True)
             pantalla(
                 ft.Icon(ft.Icons.ERROR_OUTLINE, size=50, color=ft.Colors.RED),
                 ft.Text("No pudimos generar los niveles."),
+                ft.Text("Revisá la terminal para ver el detalle del error.", text_align=ft.TextAlign.CENTER),
+                ft.ElevatedButton(
+                    "Reintentar",
+                    on_click=lambda _: page.run_task(mostrar_reappraisal_generando_ia, categoria),
+                ),
             )
+        finally:
+            generando[categoria] = False
 
     def guardar_resultado_ia(dato, categoria_clave):
 
@@ -3326,19 +3434,31 @@ def main(page: ft.Page):
                 else:
                     borde_opcion = "#FFFFFF"
 
+                respuesta_incorrecta = (
+                    evaluado["valor"] and seleccionada and i not in dato["correctas"]
+                )
+                respuesta_correcta = (
+                    evaluado["valor"] and seleccionada and i in dato["correctas"]
+                )
+                fondo_opcion = (
+                    MENTO_ERROR_JUEGO if respuesta_incorrecta else
+                    MENTO_EXITO_JUEGO if respuesta_correcta else
+                    ft.Colors.WHITE
+                )
+
                 opciones_controles.append(
                     ft.Container(
                         content=ft.Text(
                             texto,
-                            color="#202020",
+                            color=ft.Colors.WHITE if evaluado["valor"] and seleccionada else "#202020",
                             text_align=ft.TextAlign.CENTER,
                             font_family=MENTO_FUENTE,
                             size=14,
                         ),
                         padding=16,
                         border_radius=20,
-                        bgcolor=ft.Colors.WHITE,
-                        border=ft.border.all(3 if seleccionada else 1, borde_opcion),
+                        bgcolor=fondo_opcion,
+                        border=_borde_uniforme(3 if seleccionada else 1, borde_opcion),
                         width=ancho_campo(),
                         on_click=elegir_opcion(i),
                     )
@@ -3544,11 +3664,26 @@ def main(page: ft.Page):
 
                 else:
                     controles.append(
+                        ft.Container(
+                            content=ft.Text(
+                                dato.get("mensaje_error") or "Esa interpretación puede ser apresurada. Volvé a considerar qué otras explicaciones son posibles.",
+                                color=ft.Colors.WHITE,
+                                text_align=ft.TextAlign.CENTER,
+                                font_family=MENTO_FUENTE,
+                                size=14,
+                            ),
+                            padding=14,
+                            border_radius=14,
+                            bgcolor=MENTO_ERROR_JUEGO,
+                            width=ancho_campo(),
+                        )
+                    )
+                    controles.append(
                         ft.ElevatedButton(
                             "Reintentar",
                             on_click=reintentar,
                             width=ancho_campo(),
-                        )
+                        style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24)))
                     )
 
             else:
@@ -3557,7 +3692,7 @@ def main(page: ft.Page):
                         "Confirmar respuesta",
                         on_click=confirmar,
                         width=ancho_campo(),
-                    )
+                    style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24)))
                 )
 
             pantalla(*controles)
@@ -4368,7 +4503,7 @@ def main(page: ft.Page):
                         value=val_contraargumento["valor"],
                         width=ancho_campo(),
                         on_change=lambda e: val_contraargumento.update({"valor": e.control.value}),
-                    )
+                    border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
                 )
 
                 controles.append(
@@ -4465,7 +4600,7 @@ def main(page: ft.Page):
                                     value=val_emocion["valor"],
                                     width=ancho_campo(),
                                     on_change=lambda e: val_emocion.update({"valor": e.control.value}),
-                                ),
+                                border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020"),
                             ],
                             spacing=6,
                         ),
@@ -4551,7 +4686,7 @@ def main(page: ft.Page):
                         value=val_nuevo_reappraisal["valor"],
                         width=ancho_campo(),
                         on_change=lambda e: val_nuevo_reappraisal.update({"valor": e.control.value}),
-                    )
+                    border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
                 )
 
                 controles.append(
@@ -4615,8 +4750,8 @@ def main(page: ft.Page):
                             icon=ft.Icons.CLOSE,
                             tooltip="Salir del bloque",
                             on_click=confirmar_salir_escritura,
-                            icon_color=ft.Colors.WHITE,
-                            bgcolor=COLOR_PRIMARIO,
+                            icon_color=COLOR_BOTONES_SUPERIORES,
+                            bgcolor=ft.Colors.TRANSPARENT,
                         )
                     ],
                     alignment=ft.MainAxisAlignment.START,
@@ -5056,7 +5191,7 @@ def main(page: ft.Page):
                                 value=val_ca["valor"],
                                 width=ancho_campo(),
                                 on_change=lambda e: val_ca.update({"valor": e.control.value}),
-                            ),
+                            border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020"),
                         ],
                         spacing=4,
                     ),
@@ -5076,7 +5211,7 @@ def main(page: ft.Page):
                                 value=val_emo["valor"],
                                 width=ancho_campo(),
                                 on_change=lambda e: val_emo.update({"valor": e.control.value}),
-                            ),
+                            border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020"),
                         ],
                         spacing=4,
                     ),
@@ -5099,7 +5234,7 @@ def main(page: ft.Page):
                                 value=val_rap2["valor"],
                                 width=ancho_campo(),
                                 on_change=lambda e: val_rap2.update({"valor": e.control.value}),
-                            ),
+                            border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020"),
                         ],
                         spacing=4,
                     ),
@@ -6358,7 +6493,7 @@ def main(page: ft.Page):
                 color=COLOR_TEXTO_MEDIO,
                 text_align=ft.TextAlign.CENTER,
             ),
-            ft.ElevatedButton("Seguir donde lo dejé", on_click=continuar_borrador, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Seguir donde lo dejé", on_click=continuar_borrador, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton("Empezar de nuevo", on_click=empezar_de_nuevo, width=ancho_campo(), height=50),
             mostrar_volver=False,
         )
@@ -6381,7 +6516,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=3,
             max_lines=6,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         if tipo_bloqueado:
             dropdown_tipo = None
             control_tipo = ft.Container(
@@ -6399,7 +6534,7 @@ def main(page: ft.Page):
                 options=[ft.dropdown.Option(op) for op in TIPOS_SITUACION],
                 value=r.get("tipo_situacion"),
                 width=ancho_campo(),
-            )
+            border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
             control_tipo = dropdown_tipo
         # Si elige "Otra" en emoción, se abre una caja para que la
         # nombre — de lo contrario la opción no serviría de nada (ver
@@ -6414,7 +6549,7 @@ def main(page: ft.Page):
             value=r.get("emocion_inicial") if r.get("_emocion_es_otra") else "",
             visible=bool(r.get("_emocion_es_otra")),
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
 
         def on_change_emocion(e):
             input_emocion_otra.visible = dropdown_emocion.value == "Otra"
@@ -6426,7 +6561,7 @@ def main(page: ft.Page):
             value="Otra" if r.get("_emocion_es_otra") else r.get("emocion_inicial"),
             width=ancho_campo(),
             on_select=on_change_emocion,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_intensidad = ft.Text(f"¿Con qué intensidad lo sentís?: {r.get('intensidad_inicial', 5)}/10")
         slider_intensidad = ft.Slider(
             min=0, max=10, divisions=10, value=r.get("intensidad_inicial", 5),
@@ -6450,7 +6585,7 @@ def main(page: ft.Page):
                 min_lines=2,
                 max_lines=4,
                 visible=False,
-            )
+            border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
 
             def on_change_feedback(e):
                 input_feedback_porque.visible = bool((input_feedback_recomendacion.value or "").strip())
@@ -6464,7 +6599,7 @@ def main(page: ft.Page):
                 min_lines=2,
                 max_lines=4,
                 on_change=on_change_feedback,
-            )
+            border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
 
         def continuar(e):
             situacion = (input_situacion.value or "").strip()
@@ -6575,7 +6710,7 @@ def main(page: ft.Page):
             texto_intensidad,
             slider_intensidad,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         ])
 
         pantalla(*controles_paso1)
@@ -6602,7 +6737,7 @@ def main(page: ft.Page):
                 color=COLOR_TEXTO_MEDIO,
                 text_align=ft.TextAlign.CENTER,
             ),
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             mostrar_volver=False,
         )
 
@@ -6662,7 +6797,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_creencia = ft.Text(f"{label_creencia}: {valor_inicial_creencia}%")
         slider_creencia = ft.Slider(
             min=0, max=100, divisions=20, value=valor_inicial_creencia,
@@ -6700,7 +6835,7 @@ def main(page: ft.Page):
             texto_creencia,
             slider_creencia,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     # ==========================================================
@@ -6739,7 +6874,7 @@ def main(page: ft.Page):
             ),
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             ft.Text("¿Estás en un lugar seguro en este momento?", size=16, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
-            ft.ElevatedButton("Sí, estoy en un lugar seguro", on_click=elegir_seguridad("si"), width=ancho_campo(), height=50),
+            ft.ElevatedButton("Sí, estoy en un lugar seguro", on_click=elegir_seguridad("si"), width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton("No estoy seguro/a de eso", on_click=elegir_seguridad("no"), width=ancho_campo(), height=50),
             ft.TextButton("Prefiero ir directo a los contactos de ayuda", on_click=ir_a_recursos),
             mostrar_volver=False,
@@ -6753,7 +6888,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         input_razones = ft.TextField(
             label="¿Hay algo o alguien que te haga querer seguir, aunque ahora cueste verlo?",
             hint_text="No hace falta responder esto si en este momento no se te ocurre nada",
@@ -6761,7 +6896,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         radio_medios = ft.RadioGroup(
             content=ft.Column([
                 ft.Radio(value="si", label="Sí, tengo algo así cerca"),
@@ -6786,7 +6921,7 @@ def main(page: ft.Page):
                 text_align=ft.TextAlign.CENTER,
             ),
             radio_medios,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.TextButton("Ir directo a los contactos de ayuda", on_click=lambda e: ir_a(mostrar_paso_crisis_recursos)),
             mostrar_volver=False,
         )
@@ -6856,7 +6991,7 @@ def main(page: ft.Page):
                 bgcolor=ft.Colors.RED_50,
                 width=ancho_campo(),
             ),
-            ft.ElevatedButton("Llamar al 0800-999-0091", icon=ft.Icons.CALL, url="tel:08009990091", width=ancho_campo(), height=50),
+            ft.ElevatedButton("Llamar al 0800-999-0091", icon=ft.Icons.CALL, url="tel:08009990091", width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.Container(
                 content=ft.Column(
                     [
@@ -6870,7 +7005,7 @@ def main(page: ft.Page):
                 bgcolor=ft.Colors.RED_50,
                 width=ancho_campo(),
             ),
-            ft.ElevatedButton("Llamar al 0800-345-1435", icon=ft.Icons.CALL, url="tel:08003451435", width=ancho_campo(), height=50),
+            ft.ElevatedButton("Llamar al 0800-345-1435", icon=ft.Icons.CALL, url="tel:08003451435", width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.Container(
                 content=ft.Column(
                     [
@@ -6884,7 +7019,7 @@ def main(page: ft.Page):
                 bgcolor=ft.Colors.RED_50,
                 width=ancho_campo(),
             ),
-            ft.ElevatedButton("Llamar al 102", icon=ft.Icons.CALL, url="tel:102", width=ancho_campo(), height=50),
+            ft.ElevatedButton("Llamar al 102", icon=ft.Icons.CALL, url="tel:102", width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton("Ver el sitio oficial (argentina.gob.ar)", icon=ft.Icons.OPEN_IN_NEW, url="https://www.argentina.gob.ar/dispositivo-0800", width=ancho_campo(), height=50),
         ])
 
@@ -6909,7 +7044,7 @@ def main(page: ft.Page):
                 on_click=accion_volver or volver,
                 width=ancho_campo(),
                 height=50,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         ])
 
         pantalla(*controles, mostrar_volver=False)
@@ -6963,13 +7098,13 @@ def main(page: ft.Page):
                 bgcolor=ft.Colors.RED_50,
                 width=ancho_campo(),
             ),
-            ft.ElevatedButton("Llamar al 0800-999-0091", icon=ft.Icons.CALL, url="tel:08009990091", width=ancho_campo(), height=50),
+            ft.ElevatedButton("Llamar al 0800-999-0091", icon=ft.Icons.CALL, url="tel:08009990091", width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.ElevatedButton(
                 "Volver al menú principal" if hay_sesion else "Volver al inicio",
                 on_click=volver,
                 width=ancho_campo(),
                 height=50,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             mostrar_volver=False,
         )
 
@@ -6994,7 +7129,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         input_real_o_imaginado = ft.TextField(
             label="¿Esto es algo de lo que tenés evidencia clara, o es una duda/posibilidad que la mente trajo?",
             hint_text="No hace falta resolver cuál de las dos es, solo notar la diferencia",
@@ -7003,7 +7138,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
 
         def continuar(e):
@@ -7044,7 +7179,7 @@ def main(page: ft.Page):
             input_compulsion,
             input_real_o_imaginado,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def mostrar_paso_obsesion_alternativo():
@@ -7083,7 +7218,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         input_alternativa = ft.TextField(
             label="¿Qué podés hacer en cambio mientras se pasa el impulso?",
             hint_text="Algo que no sea la compulsión: caminar, llamar a alguien, escuchar música. Si el ritual es mental (repetir una frase, rezar, revisar en tu cabeza), probá centrarte en algo sensorial concreto: contar objetos alrededor, tocar una textura...",
@@ -7092,7 +7227,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_urgencia = ft.Text(f"¿Cómo sentís el impulso ahora, después de pensarlo así?: {r.get('creencia_final_pct', r.get('creencia_inicial_pct', 50))}%")
         slider_urgencia = ft.Slider(
             min=0, max=100, divisions=20, value=r.get("creencia_final_pct", r.get("creencia_inicial_pct", 50)),
@@ -7132,7 +7267,7 @@ def main(page: ft.Page):
             texto_urgencia,
             slider_urgencia,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def armar_checklist_distorsiones(r):
@@ -7264,7 +7399,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         input_valorar = ft.TextField(
             label=label_valorar,
             hint_text=hint_valorar,
@@ -7273,7 +7408,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         # La pregunta de "¿qué le dirías a alguien que querés con esta
         # misma culpa?" se sacó como campo aparte (el flujo bajó de 6 a
         # 4 pasos): esa misma perspectiva ya se retoma como pista en el
@@ -7317,7 +7452,7 @@ def main(page: ft.Page):
             input_valorar,
             *controles_distorsiones,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def mostrar_paso_evidencia():
@@ -7341,7 +7476,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         input_en_contra = ft.TextField(
             label="¿Cambió algo en lo que te hace dudar de que sea tan así?" if anterior else "¿Y qué cosas te hacen dudar de que sea tan así?",
             hint_text="Pensá en otras veces que creíste algo parecido y no pasó, o en algún dato que lo contradiga",
@@ -7350,7 +7485,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=2,
             max_lines=4,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         # La pregunta del "amigo/a en tu misma situación" se sacó como
         # campo obligatorio aparte (el flujo bajó de 6 a 4 pasos): esa
         # misma perspectiva ya aparece como pista en el paso del
@@ -7389,7 +7524,7 @@ def main(page: ft.Page):
             input_en_contra,
             *controles_distorsiones,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     # (La pantalla propia de distorsiones — el viejo "Paso 4 de 6" — se
@@ -7446,7 +7581,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=3,
             max_lines=6,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
 
         def continuar(e):
@@ -7472,7 +7607,7 @@ def main(page: ft.Page):
             *controles_recordatorio,
             input_alternativo,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def mostrar_paso_alternativo():
@@ -7534,7 +7669,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=3,
             max_lines=6,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         # Se nombra "el pensamiento original" y se lo muestra textual:
         # leído rápido, "aquel pensamiento" parecía referirse a lo que la
         # persona acababa de escribir en esta misma pantalla.
@@ -7586,7 +7721,7 @@ def main(page: ft.Page):
             texto_creencia,
             slider_creencia,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def decidir_tras_creencia():
@@ -7613,7 +7748,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=3,
             max_lines=6,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_creencia = ft.Text(f"Después de esto, ¿cuánto te queda del pensamiento original?: {r.get('creencia_final_pct', 70)}%")
         slider_creencia = ft.Slider(
             min=0, max=100, divisions=20, value=r.get("creencia_final_pct", 70),
@@ -7654,7 +7789,7 @@ def main(page: ft.Page):
             texto_creencia,
             slider_creencia,
             texto_error,
-            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Continuar", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.TextButton("Prefiero terminar por ahora", on_click=terminar_igual),
             ft.Text(
                 "Si en este momento sentís que necesitás ayuda inmediata, no esperes: contactate con alguien de confianza o con una línea de ayuda de tu país.",
@@ -8197,7 +8332,7 @@ def main(page: ft.Page):
                     padding=8,
                     border_radius=12,
                     bgcolor=COLOR_CAJA_INFO if es_actual else COLOR_CAJA_SUAVE,
-                    border=ft.border.all(2, COLOR_PRIMARIO) if es_actual else None,
+                    border=_borde_uniforme(2, COLOR_PRIMARIO) if es_actual else None,
                     width=76,
                     on_click=elegir(item["emoji"]),
                 )
@@ -8255,7 +8390,7 @@ def main(page: ft.Page):
                 height=44,
                 border_radius=22,
                 bgcolor=c["hex"],
-                border=ft.border.all(3, COLOR_PRIMARIO) if es_actual else ft.border.all(1, COLOR_TEXTO_SUAVE),
+                border=_borde_uniforme(3, COLOR_PRIMARIO) if es_actual else _borde_uniforme(1, COLOR_TEXTO_SUAVE),
                 alignment=ft.Alignment.CENTER,
                 opacity=1.0 if desbloqueado_color else 0.45,
                 on_click=elegir_color(c["hex"]) if desbloqueado_color else None,
@@ -8508,7 +8643,7 @@ def main(page: ft.Page):
                         padding=16 if en_flor else 12,
                         border_radius=12,
                         bgcolor=COLOR_EXITO_CAJA if en_flor else COLOR_CAJA_SUAVE,
-                        border=ft.border.all(2, COLOR_EXITO) if en_flor else None,
+                        border=_borde_uniforme(2, COLOR_EXITO) if en_flor else None,
                         width=ancho_campo(),
                         on_click=abrir,
                     )
@@ -8578,13 +8713,13 @@ def main(page: ft.Page):
                 on_click=lambda _: ir_a(lambda: mostrar_consejos_lista(f"Consejos para {nombre.lower()}", cbt)),
                 width=ancho_campo(),
                 height=60,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.ElevatedButton(
                 "Filosofía budista tibetana",
                 on_click=lambda _: ir_a(lambda: mostrar_consejos_lista(f"Consejos budistas para {nombre.lower()}", budista)),
                 width=ancho_campo(),
                 height=60,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def mostrar_consejos_biblioteca():
@@ -8628,13 +8763,13 @@ def main(page: ft.Page):
                 on_click=elegir(TIPO_RECOMENDACION_CBT),
                 width=ancho_campo(),
                 height=60,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.ElevatedButton(
                 "Consejos desde la filosofía budista tibetana",
                 on_click=elegir(TIPO_RECOMENDACION_BUDISTA),
                 width=ancho_campo(),
                 height=60,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             mostrar_volver=False,
         )
 
@@ -8791,7 +8926,7 @@ def main(page: ft.Page):
                 on_click=lambda _: (historial.clear(), ir_a(mostrar_menu_principal)),
                 width=ancho_campo(),
                 height=50,
-            )
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24)))
         )
 
         pantalla(*controles, mostrar_volver=False)
@@ -8806,7 +8941,7 @@ def main(page: ft.Page):
             hint_text="Ej: \"Sigo igual\", \"Mejorando de a poco\", \"Bastante mejor\", \"Resuelto\"...",
             value=tema.get("estado") or "",
             width=ancho_campo(),
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
 
         def guardar(e):
@@ -8847,7 +8982,7 @@ def main(page: ft.Page):
             ),
             input_estado,
             texto_error,
-            ft.ElevatedButton("Guardar", on_click=guardar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Guardar", on_click=guardar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     # ==========================================================
@@ -8889,7 +9024,7 @@ def main(page: ft.Page):
                 color=COLOR_TEXTO_FUERTE,
                 text_align=ft.TextAlign.CENTER,
             ),
-            ft.ElevatedButton("Entendido", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Entendido", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             mostrar_volver=permitir_volver,
         )
 
@@ -8943,7 +9078,7 @@ def main(page: ft.Page):
                     padding=15,
                     border_radius=12,
                     bgcolor=COLOR_EXITO_CAJA if en_flor else COLOR_CAJA_SUAVE,
-                    border=ft.border.all(2, COLOR_EXITO) if en_flor else None,
+                    border=_borde_uniforme(2, COLOR_EXITO) if en_flor else None,
                     width=ancho_campo(),
                     on_click=abrir,
                 )
@@ -8956,8 +9091,8 @@ def main(page: ft.Page):
                         icon=ft.Icons.HELP_OUTLINE,
                         tooltip="Instrucciones",
                         on_click=lambda _: ir_a(lambda: mostrar_instrucciones_temas(temas, permitir_volver=True)),
-                        icon_color=ft.Colors.WHITE,
-                        bgcolor=COLOR_PRIMARIO,
+                        icon_color=COLOR_BOTONES_SUPERIORES,
+                        bgcolor=ft.Colors.TRANSPARENT,
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.END,
@@ -9037,7 +9172,7 @@ def main(page: ft.Page):
                 color=COLOR_TEXTO_FUERTE,
                 text_align=ft.TextAlign.CENTER,
             ),
-            ft.ElevatedButton("Entendido", on_click=continuar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Entendido", on_click=continuar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             mostrar_volver=permitir_volver,
         )
 
@@ -9055,8 +9190,8 @@ def main(page: ft.Page):
                         icon=ft.Icons.HELP_OUTLINE,
                         tooltip="Instrucciones",
                         on_click=lambda _: ir_a(lambda: mostrar_instrucciones_bienestar(permitir_volver=True)),
-                        icon_color=ft.Colors.WHITE,
-                        bgcolor=COLOR_PRIMARIO,
+                        icon_color=COLOR_BOTONES_SUPERIORES,
+                        bgcolor=ft.Colors.TRANSPARENT,
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.END,
@@ -9073,7 +9208,7 @@ def main(page: ft.Page):
                 on_click=lambda _: ir_a(mostrar_paso_bienestar),
                 width=ancho_campo(),
                 height=50,
-            ),
+            style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton(
                 "Ver historial",
                 icon=ft.Icons.HISTORY,
@@ -9141,7 +9276,7 @@ def main(page: ft.Page):
                 label=pregunta,
                 options=[ft.dropdown.Option(key=str(valor), text=texto) for texto, valor in OPCIONES_BIENESTAR],
                 width=ancho_campo(),
-            )
+            border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
             for pregunta in PREGUNTAS_BIENESTAR
         ]
         texto_error = ft.Text("", color=ft.Colors.RED)
@@ -9164,7 +9299,7 @@ def main(page: ft.Page):
             ft.Text("Elegí la opción que mejor describa cada frase.", color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
             *dropdowns,
             texto_error,
-            ft.ElevatedButton("Ver mi resultado", on_click=guardar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Ver mi resultado", on_click=guardar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def mostrar_paso_bienestar_resultado(chequeo):
@@ -9289,7 +9424,7 @@ def main(page: ft.Page):
                 )
             )
         controles.extend(controles_recompensa("✨ Tu colección de enseñanzas creció con este chequeo."))
-        controles.append(ft.ElevatedButton("Volver", on_click=volver_al_submenu_bienestar, width=ancho_campo(), height=50))
+        controles.append(ft.ElevatedButton("Volver", on_click=volver_al_submenu_bienestar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))))
 
         pantalla(*controles, mostrar_volver=False)
 
@@ -9307,7 +9442,7 @@ def main(page: ft.Page):
             multiline=True,
             min_lines=4,
             max_lines=8,
-        )
+        border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         texto_error = ft.Text("", color=ft.Colors.RED)
 
         def guardar(e):
@@ -9339,7 +9474,7 @@ def main(page: ft.Page):
             ),
             input_reflexion,
             texto_error,
-            ft.ElevatedButton("Guardar", on_click=guardar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Guardar", on_click=guardar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def mostrar_paso_quitar_tema(tema):
@@ -9363,7 +9498,7 @@ def main(page: ft.Page):
                 text_align=ft.TextAlign.CENTER,
             ),
             texto_error,
-            ft.ElevatedButton("Sí, quitarlo", on_click=confirmar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Sí, quitarlo", on_click=confirmar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
         )
 
     def mostrar_detalle_tema(tema):
@@ -9499,7 +9634,7 @@ def main(page: ft.Page):
             ft.Text(veces_txt if reportes else "", size=12, color=COLOR_TEXTO_SUAVE),
             *filas_seguimiento,
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-            ft.ElevatedButton("Enfrentar este pensamiento de nuevo", on_click=retomar, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Enfrentar este pensamiento de nuevo", on_click=retomar, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton("Practicar otra perspectiva con esto", icon=ft.Icons.AUTORENEW, on_click=practicar_reappraisal, width=ancho_campo(), height=50) if reappraisal_desbloqueado else ft.Container(),
             ft.OutlinedButton("Contar cómo estoy con esto", on_click=ir_a_actualizar, width=ancho_campo(), height=50),
             ft.OutlinedButton("Dar esto por resuelto", on_click=ir_a_marcar_resuelto, width=ancho_campo(), height=50) if not tema.get("resuelto") else ft.Container(),
@@ -9534,7 +9669,7 @@ def main(page: ft.Page):
                 color=COLOR_TEXTO_MEDIO,
                 text_align=ft.TextAlign.CENTER,
             ),
-            ft.ElevatedButton("Descargar planilla (CSV)", icon=ft.Icons.DOWNLOAD, url=data_uri_csv, width=ancho_campo(), height=50),
+            ft.ElevatedButton("Descargar planilla (CSV)", icon=ft.Icons.DOWNLOAD, url=data_uri_csv, width=ancho_campo(), height=50, style=ft.ButtonStyle(bgcolor="#E95F83", color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=24))),
             ft.OutlinedButton("Compartir resumen por WhatsApp", icon=ft.Icons.CHAT_OUTLINED, url=url_whatsapp, width=ancho_campo(), height=50),
             ft.OutlinedButton("Compartir resumen por mail", icon=ft.Icons.EMAIL_OUTLINED, url=url_mail, width=ancho_campo(), height=50),
             ft.Text(
@@ -9695,7 +9830,7 @@ if os.environ.get("FLET_WEB", "").lower() in ("1", "true", "yes"):
     overlay = document.createElement("div");
     overlay.id = "dre-overlay-reconexion";
     overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;" +
-      "background:#E8DBC0;display:flex;flex-direction:column;align-items:center;justify-content:center;" +
+      "background:#FFFFFF;display:flex;flex-direction:column;align-items:center;justify-content:center;" +
       "font-family:sans-serif;";
     var emoji = document.createElement("div");
     emoji.style.cssText = "font-size:78px;line-height:1;";
