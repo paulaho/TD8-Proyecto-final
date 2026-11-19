@@ -1,3 +1,4 @@
+from dre.mento_gemini_control import generar as _generar_gemini_controlado, es_temporal as _gemini_error_temporal
 import json
 import random
 from google import genai
@@ -228,7 +229,7 @@ REGLAS DE FEEDBACK:
             )
         try:
             print(">>> INICIANDO LLAMADA A GEMINI", flush=True)
-            response = client.models.generate_content(
+            response = _generar_gemini_controlado(client, 
                 model='gemini-3.5-flash-lite',
                 contents=prompt_intento,
                 config={
@@ -251,6 +252,8 @@ REGLAS DE FEEDBACK:
             return niveles
         except Exception as e:
             ultimo_error = str(e)
+            if _gemini_error_temporal(e):
+                raise
             print(f'Batch IA rechazado (intento {intento + 1}/3): {ultimo_error}')
     raise ValueError(f'No se pudo generar un batch válido: {ultimo_error}')
 

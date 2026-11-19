@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dre.mento_gemini_control import generar as _generar_gemini_controlado, es_temporal as _gemini_error_temporal
 import json
 from typing import List, Dict, Any, Optional, Set, Tuple
 from google import genai
@@ -395,7 +396,7 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1, categoria: str = "
     """
 
     client = _obtener_gemini_client()
-    response = client.models.generate_content(
+    response = _generar_gemini_controlado(client, 
         model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
@@ -495,7 +496,7 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
     """
 
     client = _obtener_gemini_client()
-    response = client.models.generate_content(
+    response = _generar_gemini_controlado(client, 
         model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
@@ -623,7 +624,7 @@ def evaluar_batch_texto_libre(ejercicios: List[Dict[str, Any]]) -> List[Dict[str
     """
 
     client = _obtener_gemini_client()
-    response = client.models.generate_content(
+    response = _generar_gemini_controlado(client, 
         model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
@@ -725,7 +726,7 @@ def evaluar_intento_texto_libre(ejercicio: Dict[str, Any], numero_intento: int =
     """
 
     client = _obtener_gemini_client()
-    response = client.models.generate_content(
+    response = _generar_gemini_controlado(client, 
         model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
@@ -791,7 +792,7 @@ def generar_ejemplo_texto_libre(ejercicio: Dict[str, Any]) -> Dict[str, Any]:
     """
 
     client = _obtener_gemini_client()
-    response = client.models.generate_content(
+    response = _generar_gemini_controlado(client, 
         model="gemini-3.5-flash-lite",
         contents=prompt,
         config={
