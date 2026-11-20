@@ -110,6 +110,9 @@ def mostrar_test_inicial(page: ft.Page, estado: dict, SUPABASE_USUARIOS_URL: str
         border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
         dd_ocupacion = ft.Dropdown(
             label="¿A qué te dedicás principalmente?",
+            label_style=ft.TextStyle(height=1.25),
+            height=112,
+            content_padding=ft.Padding(left=16, top=28, right=16, bottom=28),
             options=[ft.dropdown.Option(op) for op in OPCIONES_OCUPACION],
             value=respuestas["ocupacion"],
             width=ancho_campo(),
@@ -347,19 +350,25 @@ def mostrar_extras_personalizacion(page: ft.Page, perfil_base: dict, al_terminar
             color="#202020",
         )
 
-    checks_salud = [ft.Checkbox(label=op) for op in OPCIONES_SALUD_TEMAS]
+    checks_salud = [ft.Checkbox(label=op, shape=ft.CircleBorder()) for op in OPCIONES_SALUD_TEMAS]
     checks_vinculos = [
-        ft.Checkbox(label=op) for op in OPCIONES_VINCULOS_TEMAS
+        ft.Checkbox(label=op, shape=ft.CircleBorder()) for op in OPCIONES_VINCULOS_TEMAS
         if en_pareja or op != "Mi pareja"
     ]
     dd_amigos = dropdown(
         "¿Qué tan conforme estás con la cantidad de amigos/as que tenés?",
         OPCIONES_AMIGOS_SATISFACCION,
     )
+    dd_amigos.height = 112
+    dd_amigos.label_style = ft.TextStyle(height=1.25)
+    dd_amigos.content_padding = ft.Padding(left=16, top=28, right=16, bottom=28)
     dd_apoyo = dropdown(
         "Cuando te sentís solo/a, ¿tenés a quién recurrir?",
         OPCIONES_APOYO_SOLEDAD,
     )
+    dd_apoyo.height = 100
+    dd_apoyo.label_style = ft.TextStyle(height=1.25)
+    dd_apoyo.content_padding = ft.Padding(left=16, top=24, right=16, bottom=24)
     dd_estudio = dropdown("¿Qué estás estudiando?", OPCIONES_ESTUDIO_NIVEL) if estudia else None
     dd_trabajo = dropdown("¿Cómo trabajás?", OPCIONES_TRABAJO_MODALIDAD) if trabaja else None
 
@@ -397,7 +406,7 @@ def mostrar_extras_personalizacion(page: ft.Page, perfil_base: dict, al_terminar
     def mostrar_seccion(indice):
         nombre = secciones[indice]
         controles = [
-            ft.Text("Un último paso (opcional)", size=22,
+            ft.Text("Un último paso", size=22,
                     weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             ft.Text("Es solo para que los ejercicios se parezcan más a tu día a día. Podés saltearlo.",
                     color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER, size=14),
@@ -412,8 +421,7 @@ def mostrar_extras_personalizacion(page: ft.Page, perfil_base: dict, al_terminar
             ]
         elif nombre == "Vínculos":
             controles += [
-                dd_amigos,
-                dd_apoyo,
+                ft.Column([dd_amigos, dd_apoyo], spacing=0),
                 ft.Text("¿En qué situaciones sociales te gustaría practicar?",
                         size=14, color=COLOR_TEXTO_MEDIO, text_align=ft.TextAlign.CENTER),
                 ft.Container(content=ft.Column(checks_vinculos, spacing=2), width=ancho_campo()),
@@ -442,7 +450,7 @@ def mostrar_extras_personalizacion(page: ft.Page, perfil_base: dict, al_terminar
             controles,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=16,
+            spacing=8 if nombre == "Vínculos" else 16,
             scroll=ft.ScrollMode.AUTO,
             expand=True,
         )

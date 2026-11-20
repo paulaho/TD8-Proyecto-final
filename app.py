@@ -2,6 +2,27 @@ import base64
 from pathlib import Path
 
 
+
+
+def dropdown_ajustable(*args, **kwargs):
+    """Unifica el alto y espaciado de los desplegables según su pregunta."""
+    pregunta = str(kwargs.get("label") or "")
+    # El ancho útil se reduce por la flecha y los márgenes internos.
+    ancho = kwargs.get("width") or 340
+    caracteres_linea = max(24, int((ancho - 88) / 8.6))
+    import textwrap
+    lineas = sum(max(1, len(textwrap.wrap(parte, width=caracteres_linea))) for parte in pregunta.split("\n"))
+    if lineas >= 3:
+        alto, margen = 150, 20
+    elif lineas == 2:
+        alto, margen = 112, 18
+    else:
+        alto, margen = 64, 12
+    kwargs.setdefault("height", alto)
+    kwargs.setdefault("label_style", ft.TextStyle(height=1.2))
+    kwargs.setdefault("content_padding", ft.Padding(left=16, top=margen, right=16, bottom=margen))
+    return ft.Dropdown(*args, **kwargs)
+
 def _imagen_mento_data_uri(nombre):
     """Devuelve un data URI PNG para ft.Image(src=...), sin rutas de assets."""
     ruta = Path(__file__).resolve().parent / "assets" / nombre
@@ -320,7 +341,7 @@ NOMBRE_JUEGO_OPCIONES = "Desafíos rápidos"
 SUBTITULO_JUEGO_OPCIONES = "Elegí la mejor reinterpretación entre varias opciones"
 NOMBRE_BOTON_PROXIMO_NIVEL = "Próximo nivel"
 NOMBRE_BOTON_PROXIMO_BLOQUE = "Próximo bloque"
-SUBTITULO_BOTON_PROXIMO_BLOQUE = "5 situaciones nuevas para escribir"
+SUBTITULO_BOTON_PROXIMO_BLOQUE = "3 situaciones nuevas para escribir"
 NOMBRE_PERSONALIZACION = "Personalizar"
 NOMBRE_SECCION_MEDITACION = "Meditación"
 SUBTITULO_SECCION_MEDITACION = "Prácticas guiadas para calmar y enfocar tu mente"
@@ -470,7 +491,7 @@ def recomendaciones_para(emocion):
 # datos sensibles como los de esta app.
 
 def main(page: ft.Page):
-    page.title = "DRE"
+    page.title = "MENTO"
     if page.platform in (ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX):
         page.window.width = 420
         page.window.height = 800
@@ -744,7 +765,7 @@ def main(page: ft.Page):
 
     COLOR_BOTONES_SUPERIORES = "#9B9B9B"
 
-    def pantalla(*controles, mostrar_volver=True, decoraciones=None, accion_volver=None, modo_inicio=False):
+    def pantalla(*controles, mostrar_volver=True, decoraciones=None, accion_volver=None, modo_inicio=False, accion_cerrar=None):
         # decoraciones: lista opcional de controles ya posicionados
         # (left/top/right/bottom) que se dibujan DETRÁS del contenido,
         # como empapelado de la tarjeta — hoy lo usa solo el menú
@@ -799,11 +820,12 @@ def main(page: ft.Page):
             barra_superior = ft.Row(
                 [
                     ft.IconButton(
-                        icon=ft.Icons.ARROW_BACK, tooltip="Volver",
-                        on_click=accion_volver or volver,
+                        icon=ft.Icons.CLOSE if accion_cerrar else ft.Icons.ARROW_BACK,
+                        tooltip="Salir" if accion_cerrar else "Volver",
+                        on_click=accion_cerrar or accion_volver or volver,
                         icon_color=COLOR_BOTONES_SUPERIORES, bgcolor=ft.Colors.TRANSPARENT,
                         icon_size=25, width=48, height=48,
-                    ) if hay_volver else ft.Container(width=48, height=48),
+                    ) if (hay_volver or accion_cerrar) else ft.Container(width=48, height=48),
                     ft.Container(expand=True),
                     ft.IconButton(
                         icon=ft.Icons.HELP_OUTLINE, tooltip="Ayuda",
@@ -817,7 +839,7 @@ def main(page: ft.Page):
             )
             columna = ft.Stack(
                 [
-                    ft.Container(content=columna, left=0, top=0, right=0, bottom=45),
+                    ft.Container(content=columna, left=0, top=62, right=0, bottom=10),
                     ft.Container(content=barra_superior, left=0, right=0, top=0),
                 ],
                 expand=True,
@@ -902,6 +924,7 @@ def main(page: ft.Page):
             ir_a(mostrar_menu_principal)
 
     def finalizar_test_inicial():
+        # El formulario ya dejó el perfil disponible para personalizar Gemini.
         page.run_task(precargar_ia_inicial_ordenada)
         ir_a_menu_principal()
 
@@ -1087,7 +1110,7 @@ def main(page: ft.Page):
 
         controles = [
             ft.Icon(ft.Icons.SELF_IMPROVEMENT, size=50, color=COLOR_PRIMARIO),
-            ft.Text("DRE", size=26, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            ft.Text("MENTO", size=26, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
             ft.Text("Diario de Reflexión Emocional", size=12, color=COLOR_TEXTO_SUAVE, text_align=ft.TextAlign.CENTER),
             ft.Text(
                 "Un espacio tranquilo para poner en palabras lo que sentís y acompañarte a pensarlo de otra forma.",
@@ -1340,19 +1363,19 @@ def main(page: ft.Page):
             width=ancho_campo(),
             keyboard_type=ft.KeyboardType.NUMBER,
         border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
-        dropdown_genero = ft.Dropdown(
+        dropdown_genero = dropdown_ajustable(
             label="Género (opcional)",
             options=[ft.dropdown.Option(op) for op in OPCIONES_GENERO],
             value=estado["genero"] or None,
             width=ancho_campo(),
         border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
-        dropdown_tratamiento = ft.Dropdown(
+        dropdown_tratamiento = dropdown_ajustable(
             label="¿Estás en tratamiento con un psicólogo/a o psiquiatra? (opcional)",
             options=[ft.dropdown.Option(op) for op in OPCIONES_TRATAMIENTO],
             value=estado["en_tratamiento"] or None,
             width=ancho_campo(),
         border_radius=24, bgcolor=ft.Colors.WHITE, color="#202020")
-        dropdown_pregunta_seguridad = ft.Dropdown(
+        dropdown_pregunta_seguridad = dropdown_ajustable(
             label="Pregunta de seguridad (para recuperar tu cuenta)",
             options=[ft.dropdown.Option(op) for op in PREGUNTAS_SEGURIDAD],
             value=estado.get("pregunta_seguridad") or None,
@@ -2669,7 +2692,7 @@ def main(page: ft.Page):
             controles.append(
                 ft.Text(
                     f"Hay dos juegos: \"{NOMBRE_JUEGO_ESCRITURA}\" (escribís tu propia reinterpretación con "
-                    "ayuda de la IA) y "
+                    "ayuda personalizada) y "
                     f"\"{NOMBRE_JUEGO_OPCIONES}\" (elegís la mejor opción entre varias). "
                     "Cualquiera de los dos desbloquea el trabajo con tus situaciones propias. "
                     f"¿En qué se diferencia de \"Trabajo emocional\"? Allá vas cuando algo real te está pesando ahora "
@@ -3216,10 +3239,10 @@ def main(page: ft.Page):
             return
         estado["_precarga_inicial_ordenada_en_curso"] = True
         try:
-            await precargar_batch_ia("familia")
-            # Si el usuario abre el juego durante la precarga, el juego
-            # reutiliza el batch o espera a que termine (ver abrir_proximo_nivel).
-            await precargar_batches_texto_libre("familia")
+            # Tras el formulario preparar primero Desafíos/Familia.
+            # Escritura se precarga al entrar en esa modalidad para no competir.
+            if not estado.get("_categoria_desafios_activa"):
+                await precargar_batch_ia("familia")
         finally:
             estado["_precarga_inicial_ordenada_en_curso"] = False
 
@@ -3290,7 +3313,7 @@ def main(page: ft.Page):
             mostrar_reappraisal_juego_ia(categoria, 0)
             return
         if generando.get(categoria):
-            pantalla(ft.ProgressRing(), ft.Text("Esperando niveles IA...", text_align=ft.TextAlign.CENTER))
+            pantalla(ft.ProgressRing(), ft.Text("Preparando niveles...", text_align=ft.TextAlign.CENTER))
             while generando.get(categoria):
                 await asyncio.sleep(0.2)
             if batches.get(categoria):
@@ -3299,7 +3322,7 @@ def main(page: ft.Page):
         generando[categoria] = True
         pantalla(
             ft.ProgressRing(),
-            ft.Text("Generando niveles IA...", text_align=ft.TextAlign.CENTER),
+            ft.Text("Preparando niveles...", text_align=ft.TextAlign.CENTER),
         )
 
         try:
@@ -3364,6 +3387,12 @@ def main(page: ft.Page):
         niveles = estado.get("_niveles_ia_por_categoria", {}).get(categoria_clave, [])
         if not niveles:
             return
+        # Empezar la siguiente generación al entrar al primer nivel.
+        # No bloquea la interfaz ni repite una generación en curso.
+        if indice_nivel == 0 and not estado.setdefault("_siguiente_batch_ia_por_categoria", {}).get(categoria_clave):
+            if not estado.setdefault("_siguiente_batch_ia_generando_por_categoria", {}).get(categoria_clave):
+                historial = estado.setdefault("_historial_ia_por_categoria", {}).get(categoria_clave, [])[-7:].copy()
+                page.run_task(precargar_siguiente_batch_ia, historial, categoria_clave)
 
         dato = niveles[indice_nivel]
 
@@ -3467,14 +3496,14 @@ def main(page: ft.Page):
 
             controles = [
                 ft.Text(
-                    f"✨ NIVEL {nivel_mostrado} — {cat['nombre']}",
+                    f"{cat['nombre']}",
                     weight=ft.FontWeight.BOLD,
                     color=(_mento_ui_paleta(categoria_clave) or {}).get("boton", MENTO_ROSA_TEXTO),
                     font_family=MENTO_FUENTE,
                 ),
 
                 ft.Text(
-                    dato["nombre"],
+                    f"Nivel {nivel_mostrado}",
                     size=20,
                     weight=ft.FontWeight.BOLD,
                     text_align=ft.TextAlign.CENTER,
@@ -3535,18 +3564,6 @@ def main(page: ft.Page):
                             except Exception as ex_m:
                                 print("Error marcando nivel completado:", repr(ex_m))
 
-                            # Cuando termina el ejercicio 7 (índice 6),
-                            # generar los próximos 10 usando las 7 respuestas previas
-                            if indice_nivel == 6:
-
-                                historial_7 = estado["_historial_ia_por_categoria"][categoria_clave][-7:].copy()
-
-                                page.run_task(
-                                    precargar_siguiente_batch_ia,
-                                    historial_7,
-                                    categoria_clave,
-                                )
-
                             mostrar_reappraisal_juego_ia(
                                 categoria_clave,
                                 indice_nivel + 1,
@@ -3554,7 +3571,7 @@ def main(page: ft.Page):
 
                         controles.append(
                             ft.ElevatedButton(
-                                f"{NOMBRE_BOTON_PROXIMO_NIVEL} ({indice_nivel + 2}/{len(niveles)})",
+                                "Continuar",
                                 icon=ft.Icons.ARROW_FORWARD,
                                 on_click=siguiente_nivel,
                                 width=ancho_campo(),
@@ -3573,7 +3590,7 @@ def main(page: ft.Page):
                         controles.append(
                             ft.Container(
                                 content=ft.Text(
-                                    f"🎉 Completaste los {len(niveles)} niveles",
+                                    "¡Muy bien! Seguí practicando",
                                     color=ft.Colors.WHITE,
                                     text_align=ft.TextAlign.CENTER,
                                     weight=ft.FontWeight.BOLD,
@@ -3585,7 +3602,7 @@ def main(page: ft.Page):
                             )
                         )
 
-                        async def continuar_siguiente_batch(e):
+                        async def continuar_siguiente_batch():
 
                             guardar_resultado_ia(dato, categoria_clave)
 
@@ -3645,7 +3662,7 @@ def main(page: ft.Page):
 
                         controles.append(
                             ft.ElevatedButton(
-                                "Continuar con nuevos niveles",
+                                "Continuar",
                                 icon=ft.Icons.ARROW_FORWARD,
                                 on_click=lambda e: page.run_task(continuar_siguiente_batch),
                                 width=ancho_campo(),
@@ -3710,7 +3727,7 @@ def main(page: ft.Page):
         """
         queues = estado.setdefault("_tl_batches_queue_por_cat", {})
         queue = queues.setdefault(categoria, [])
-        if len(queue) >= 3:
+        if len(queue) >= 1:
             return
 
         generando = estado.setdefault("_tl_batch_generando_por_cat", {})
@@ -3722,12 +3739,12 @@ def main(page: ft.Page):
         try:
             print(f"Precargando batches de texto libre ({categoria}) en background...")
 
-            faltantes = 3 - len(queue)
+            faltantes = 1 if not queue else 0
 
             for i in range(faltantes):
                 sig_niveles = estado.setdefault("_tl_siguiente_nivel_por_cat", {})
                 nivel_inicial = sig_niveles.get(categoria, 1)
-                sig_niveles[categoria] = nivel_inicial + 5
+                sig_niveles[categoria] = nivel_inicial + 3
 
                 historiales = estado.setdefault("_tl_historial_por_cat", {})
                 hist = historiales.get(categoria, [])
@@ -3757,7 +3774,7 @@ def main(page: ft.Page):
                     estado["_tl_siguiente_nivel_a_generar"] = sig_niveles[categoria]
 
                 print(
-                    f"Batch texto libre ({categoria}) niveles {nivel_inicial}-{nivel_inicial + 4} disponible. "
+                    f"Batch texto libre ({categoria}) niveles {nivel_inicial}-{nivel_inicial + 2} disponible. "
                     f"Total en cola: {len(queue)}"
                 )
 
@@ -3771,7 +3788,7 @@ def main(page: ft.Page):
 
     async def recargar_batches_texto_libre(categoria="familia"):
         """
-        Genera 3 nuevos batches adaptativos en segundo plano cuando se
+        Genera 1 nuevo batch adaptativos en segundo plano cuando se
         dispara la lógica de recarga (al completar el 2do batch de cada grupo).
         """
         generando = estado.setdefault("_tl_batch_generando_por_cat", {})
@@ -3780,15 +3797,15 @@ def main(page: ft.Page):
 
         generando[categoria] = True
         try:
-            print(f"Recargando 3 batches adaptativos de texto libre ({categoria})...")
+            print(f"Recargando 1 batch adaptativos de texto libre ({categoria})...")
             nuevos = []
             sig_niveles = estado.setdefault("_tl_siguiente_nivel_por_cat", {})
             historiales = estado.setdefault("_tl_historial_por_cat", {})
             hist = historiales.get(categoria, [])
 
-            for i in range(3):
+            for i in range(1):
                 nivel_inicial = sig_niveles.get(categoria, 1)
-                sig_niveles[categoria] = nivel_inicial + 5
+                sig_niveles[categoria] = nivel_inicial + 3
                 batch = await asyncio.to_thread(
                     generar_batch_texto_libre_adaptativo,
                     hist,
@@ -3797,7 +3814,7 @@ def main(page: ft.Page):
                     categoria,
                 )
                 nuevos.append(batch)
-                print(f"  Batch adaptativo texto libre ({categoria}) {i + 1}/3 generado (niveles {nivel_inicial}-{nivel_inicial + 4})")
+                print(f"  Batch adaptativo texto libre ({categoria}) {i + 1}/3 generado (niveles {nivel_inicial}-{nivel_inicial + 2})")
 
             queues = estado.setdefault("_tl_batches_queue_por_cat", {})
             queues.setdefault(categoria, []).extend(nuevos)
@@ -4099,19 +4116,41 @@ def main(page: ft.Page):
         Consume el primer batch de la cola y arranca la primera situación.
         Si no hay batches todavía, espera la precarga o genera uno nuevo.
         """
+        # Conservar el batch activo por categoría, incluso si se sale sin responder.
+        campos_batch = (
+            "_tl_batch_actual", "_tl_contraargumentos", "_tl_emociones",
+            "_tl_nuevos_reappraisals", "_tl_correcciones", "_tl_intentos",
+            "_tl_resultados", "_tl_fallas", "_tl_ejemplos",
+            "_tl_batch_finalizado", "_tl_sesion_id_actual",
+        )
+        activos = estado.setdefault("_tl_batches_activos_por_cat", {})
+        categoria_anterior = estado.get("_tl_categoria_batch_activa")
+        if categoria_anterior and estado.get("_tl_batch_actual"):
+            activos[categoria_anterior] = {
+                campo: estado.get(campo) for campo in campos_batch
+            }
+
         estado["_tl_categoria_actual"] = categoria
         nombre_cat_display = categoria.capitalize() if isinstance(categoria, str) else "Familia"
 
+        anterior = activos.get(categoria)
+        if anterior and anterior.get("_tl_batch_actual") and not anterior.get("_tl_batch_finalizado"):
+            estado.update(anterior)
+            estado["_tl_categoria_batch_activa"] = categoria
+            mostrar_situacion_texto_libre(0)
+            return
+
         def _preparar_estado_batch(batch):
+            estado["_tl_categoria_batch_activa"] = categoria
             estado["_tl_batch_actual"] = batch
-            estado["_tl_contraargumentos"] = [""] * 5
-            estado["_tl_emociones"] = [""] * 5
-            estado["_tl_nuevos_reappraisals"] = [""] * 5
+            estado["_tl_contraargumentos"] = [""] * 3
+            estado["_tl_emociones"] = [""] * 3
+            estado["_tl_nuevos_reappraisals"] = [""] * 3
             estado["_tl_correcciones"] = []
-            estado["_tl_intentos"] = [1] * 5
-            estado["_tl_resultados"] = [""] * 5
-            estado["_tl_fallas"] = [[] for _ in range(5)]
-            estado["_tl_ejemplos"] = [None] * 5
+            estado["_tl_intentos"] = [1] * 3
+            estado["_tl_resultados"] = [""] * 3
+            estado["_tl_fallas"] = [[] for _ in range(3)]
+            estado["_tl_ejemplos"] = [None] * 3
             estado["_tl_batch_finalizado"] = False
             estado["_tl_sesion_id_actual"] = None
 
@@ -4161,7 +4200,7 @@ def main(page: ft.Page):
         try:
             sig_niveles = estado.setdefault("_tl_siguiente_nivel_por_cat", {})
             nivel_inicial = sig_niveles.get(categoria, 1)
-            sig_niveles[categoria] = nivel_inicial + 5
+            sig_niveles[categoria] = nivel_inicial + 3
 
             historiales = estado.setdefault("_tl_historial_por_cat", {})
             hist = historiales.get(categoria, [])
@@ -4245,11 +4284,23 @@ def main(page: ft.Page):
             nombre_cat_actual = estado.get("_tl_categoria_actual", "familia").capitalize()
             controles = [
                 ft.Text(
-                    f"✍️ Nivel {nivel} — {nombre_cat_actual} (Situación {indice + 1} de 5)",
+                    nombre_cat_actual,
                     weight=ft.FontWeight.BOLD,
-                    color=MENTO_CELESTE,
+                    color=(_mento_ui_paleta(estado.get("_tl_categoria_actual", "familia")) or {}).get("boton", MENTO_ROSA_TEXTO),
                     font_family=MENTO_FUENTE,
-                    size=16,
+                ),
+                ft.Text(
+                    f"Nivel {nivel}",
+                    size=20,
+                    weight=ft.FontWeight.BOLD,
+                    text_align=ft.TextAlign.CENTER,
+                    font_family=MENTO_FUENTE,
+                ),
+                ft.Text(
+                    f"Situación {indice + 1} de 5",
+                    size=13,
+                    color=COLOR_TEXTO_SUAVE,
+                    text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(
                     subtitulo,
@@ -4700,7 +4751,7 @@ def main(page: ft.Page):
                 )
 
                 es_ultimo = (indice == 4)
-                txt_boton = "Finalizar y Evaluar 🤖" if es_ultimo else f"Siguiente Situación ({indice + 2}/5) →"
+                txt_boton = "Finalizar y Evaluar" if es_ultimo else f"Siguiente Situación ({indice + 2}/5) →"
 
                 def _avanzar_situacion(e):
                     emo_text = val_emocion["valor"].strip()
@@ -4742,22 +4793,7 @@ def main(page: ft.Page):
                     )
                 )
 
-            controles.insert(
-                0,
-                ft.Row(
-                    [
-                        ft.IconButton(
-                            icon=ft.Icons.CLOSE,
-                            tooltip="Salir del bloque",
-                            on_click=confirmar_salir_escritura,
-                            icon_color=COLOR_BOTONES_SUPERIORES,
-                            bgcolor=ft.Colors.TRANSPARENT,
-                        )
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                ),
-            )
-            pantalla(*controles, mostrar_volver=False)
+            pantalla(*controles, mostrar_volver=False, accion_cerrar=confirmar_salir_escritura)
 
         def _set_subpaso(nuevo):
             error_msg["valor"] = ""
@@ -4772,7 +4808,7 @@ def main(page: ft.Page):
 
     async def _finalizar_batch_si_resuelto():
         """
-        Si las 5 situaciones quedaron resueltas ('pasa' o 'avanzó con ejemplo'),
+        Si las 3 situaciones quedaron resueltas ('pasa' o 'avanzó con ejemplo'),
         guarda en historial adaptativo, persiste en Supabase y dispara la recarga
         de batches si corresponde.
         """
@@ -4780,14 +4816,14 @@ def main(page: ft.Page):
             return
 
         resueltas = all(r in ("pasa", "avanzó con ejemplo") for r in estado.get("_tl_resultados", []))
-        if not resueltas or len(estado.get("_tl_resultados", [])) < 5:
+        if not resueltas or len(estado.get("_tl_resultados", [])) < 3:
             return
 
         estado["_tl_batch_finalizado"] = True
         registrar_actividad_del_dia()
 
         # Guardar en historial de desempeño para batches adaptativos futuros
-        for i in range(5):
+        for i in range(3):
             sit = estado["_tl_batch_actual"][i]
             corr = estado["_tl_correcciones"][i] if i < len(estado.get("_tl_correcciones", [])) else {}
             estado["_tl_historial"].append({
@@ -4869,7 +4905,7 @@ def main(page: ft.Page):
         estado["_tl_batches_jugados"] += 1
 
         # Disparar recarga si se completa el 2do batch de un grupo de 3
-        if estado["_tl_batches_jugados"] % 3 == 2:
+        if True:
             print(f"Trigger de recarga: {estado['_tl_batches_jugados']} batches jugados")
             page.run_task(recargar_batches_texto_libre, categoria_tl)
 
@@ -4883,12 +4919,12 @@ def main(page: ft.Page):
             return
         
         """
-        Pantalla de espera mientras la IA evalúa las 5 respuestas en batch.
+        Pantalla de espera mientras la IA evalúa las 3 respuestas en batch.
         """
         pantalla(
             ft.ProgressRing(),
             ft.Text(
-                "La IA está revisando tus respuestas...",
+                "Revisando tus respuestas...",
                 text_align=ft.TextAlign.CENTER,
                 size=16,
             ),
@@ -4902,7 +4938,7 @@ def main(page: ft.Page):
         )
 
         ejercicios = []
-        for i in range(5):
+        for i in range(3):
             sit = estado["_tl_batch_actual"][i]
             lvl = sit.get("nivel", i + 1)
             frena_set, señala_set = estado_fallas(lvl)
@@ -4928,8 +4964,8 @@ def main(page: ft.Page):
                 ejercicios,
             )
             estado["_tl_correcciones"] = correcciones
-            estado["_tl_intentos"] = [1] * 5
-            for i in range(5):
+            estado["_tl_intentos"] = [1] * 3
+            for i in range(3):
                 estado["_tl_resultados"][i] = correcciones[i].get("resultado", "pasa")
                 estado["_tl_fallas"][i] = correcciones[i].get("fallas_detectadas", [])
 
@@ -4979,7 +5015,7 @@ def main(page: ft.Page):
             pantalla(
                 ft.Icon(ft.Icons.ERROR_OUTLINE, size=50, color=ft.Colors.RED),
                 ft.Text(
-                    "No pudimos obtener la corrección de la IA. Revisá tu conexión.",
+                    "No pudimos revisar tus respuestas. Revisá tu conexión.",
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Button(
@@ -5348,7 +5384,7 @@ def main(page: ft.Page):
 
                 except Exception as ex:
                     print("Error evaluando reintento:", repr(ex))
-                    error_msg["valor"] = "Error al conectar con la IA. Intentá nuevamente."
+                    error_msg["valor"] = "No pudimos conectar. Intentá nuevamente."
                     renderizar()
 
             controles.append(
@@ -5380,10 +5416,10 @@ def main(page: ft.Page):
 
     def mostrar_texto_libre_resultados():
         """
-        Muestra las 5 situaciones evaluadas con su estado (Aprobado, Requiere ajuste, Avanzó con ejemplo).
+        Muestra las 3 situaciones evaluadas con su estado (Aprobado, Requiere ajuste, Avanzó con ejemplo).
         Permite reintentar situaciones que frenaron el avance.
         Despliega modal con el contexto completo al tocar cualquier tarjeta.
-        El botón para avanzar al siguiente bloque se habilita solo cuando las 5 situaciones están resueltas.
+        El botón para avanzar al siguiente bloque se habilita solo cuando las 3 situaciones están resueltas.
         """
         def abrir_modal_contexto_completo(i):
             situ = estado["_tl_batch_actual"][i]
@@ -5480,7 +5516,7 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Column(
                         [
-                            ft.Text("🤖 Feedback de la IA", weight=ft.FontWeight.W_600, size=11, color=ft.Colors.WHITE),
+                            ft.Text("Feedback", weight=ft.FontWeight.W_600, size=11, color=ft.Colors.WHITE),
                             ft.Text(feedback, size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
                         ],
                         spacing=3,
@@ -5551,13 +5587,13 @@ def main(page: ft.Page):
             page.show_dialog(dialog)
 
         items = []
-        for i in range(5):
+        for i in range(3):
             situ = estado["_tl_batch_actual"][i]
             lvl = situ.get("nivel", i + 1)
             nuevo_rap = estado["_tl_nuevos_reappraisals"][i]
             corr = estado["_tl_correcciones"][i] if i < len(estado.get("_tl_correcciones", [])) else {"feedback": "—"}
             feedback = corr.get("feedback", "—")
-            resultado_i = estado["_tl_resultados"][i] if i < len(estado.get("_tl_resultados", [])) else "pasa"
+            resultado_i = estado["_tl_resultados"][i] if i < len(estado.get("_tl_resultados", [])) else "frena"
             intentos_i = estado["_tl_intentos"][i] if i < len(estado.get("_tl_intentos", [])) else 1
 
             if resultado_i == "pasa":
@@ -5634,9 +5670,10 @@ def main(page: ft.Page):
                 )
 
             filas_card.append(
-                ft.Row(
+                ft.Column(
                     controls=botones_card,
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    horizontal_alignment=ft.CrossAxisAlignment.START,
+                    spacing=4,
                 )
             )
 
@@ -5649,7 +5686,7 @@ def main(page: ft.Page):
             )
             items.append(card)
 
-        # Chequear si todas las 5 situaciones están resueltas
+        # Chequear si todas las 3 situaciones están resueltas
         todos_resueltos = all(r in ("pasa", "avanzó con ejemplo") for r in estado.get("_tl_resultados", []))
 
         controles_pantalla = [
@@ -5694,7 +5731,7 @@ def main(page: ft.Page):
 
         controles_pantalla.append(
             ft.Button(
-                "Siguiente bloque →",
+                "Siguiente bloque",
                 icon=ft.Icons.ARROW_FORWARD,
                 on_click=lambda _: page.run_task(_iniciar_modo_escritura, categoria_tl) if todos_resueltos else None,
                 disabled=not todos_resueltos,
@@ -5723,6 +5760,8 @@ def main(page: ft.Page):
 
     def mostrar_escritura_bloques(categoria_clave):
         _mento_ui_activar_categoria(categoria_clave)
+        # Generar Escritura solo cuando el usuario elige esta modalidad.
+        # La generación de Escritura comienza al entrar al modo; evita llamadas paralelas a Gemini.
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
 
         # Cargar sesiones desde Supabase o estado local
@@ -5773,7 +5812,7 @@ def main(page: ft.Page):
                     max_lvl = max(niveles_situaciones)
                     rango_txt = f"Niveles {min_lvl} a {max_lvl}"
                 else:
-                    rango_txt = f"Niveles {(num_bloque - 1) * 5 + 1} a {num_bloque * 5}"
+                    rango_txt = f"Bloque {num_bloque} · {len(situaciones)} situaciones"
 
                 # Estrellas: 1 llena por cada resultado "pasa"
                 correcciones = ses.get("correcciones") or []
@@ -5790,10 +5829,10 @@ def main(page: ft.Page):
                             if res == "pasa" or fb.startswith("✅"):
                                 estrellas_llenas += 1
 
-                estrellas_llenas = min(5, max(0, estrellas_llenas))
+                estrellas_llenas = min(len(situaciones), max(0, estrellas_llenas))
 
                 estrellas_icons = []
-                for s_i in range(5):
+                for s_i in range(len(situaciones)):
                     if s_i < estrellas_llenas:
                         estrellas_icons.append(ft.Icon(ft.Icons.STAR, color=MENTO_AMARILLO, size=20))
                     else:
@@ -5895,6 +5934,9 @@ def main(page: ft.Page):
 
     def mostrar_reappraisal_juegos_niveles(categoria_clave):
         _mento_ui_activar_categoria(categoria_clave)
+        # Prioridad inmediata para la categoría de Desafíos elegida.
+        estado["_categoria_desafios_activa"] = categoria_clave
+        page.run_task(precargar_batch_ia, categoria_clave)
 
         cat = next(c for c in MENTO_CATEGORIAS if c["clave"] == categoria_clave)
 
@@ -6529,7 +6571,7 @@ def main(page: ft.Page):
                 padding=8,
             )
         else:
-            dropdown_tipo = ft.Dropdown(
+            dropdown_tipo = dropdown_ajustable(
                 label="¿Qué tipo de situación es esta?",
                 options=[ft.dropdown.Option(op) for op in TIPOS_SITUACION],
                 value=r.get("tipo_situacion"),
@@ -6555,7 +6597,7 @@ def main(page: ft.Page):
             input_emocion_otra.visible = dropdown_emocion.value == "Otra"
             page.update()
 
-        dropdown_emocion = ft.Dropdown(
+        dropdown_emocion = dropdown_ajustable(
             label="¿Qué es lo que más sentís ahora?",
             options=[ft.dropdown.Option(op) for op in EMOCIONES],
             value="Otra" if r.get("_emocion_es_otra") else r.get("emocion_inicial"),
@@ -8238,7 +8280,10 @@ def main(page: ft.Page):
                             f"Te quedan {restantes} por descubrir — la próxima llega con tu próximo trabajo." if restantes != 1 else "Te queda 1 por descubrir — llega con tu próximo trabajo.",
                             size=13,
                             color=COLOR_TEXTO_SUAVE,
-                        ),
+                            text_align=ft.TextAlign.CENTER,
+                            no_wrap=False,
+                            width=280,
+                        ),        
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=6,
@@ -9272,7 +9317,7 @@ def main(page: ft.Page):
 
     def mostrar_paso_bienestar():
         dropdowns = [
-            ft.Dropdown(
+            dropdown_ajustable(
                 label=pregunta,
                 options=[ft.dropdown.Option(key=str(valor), text=texto) for texto, valor in OPCIONES_BIENESTAR],
                 width=ancho_campo(),
@@ -9784,8 +9829,8 @@ if os.environ.get("FLET_WEB", "").lower() in ("1", "true", "yes"):
     app = flet_web_fastapi.app(
         main,
         assets_dir=ASSETS_DIR,
-        app_name="DRE",
-        app_short_name="DRE",
+        app_name="MENTO",
+        app_short_name="MENTO",
         app_description="Diario de Reflexión Emocional — un espacio tranquilo para poner en palabras lo que sentís y acompañarte a pensarlo de otra forma.",
     )
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dre.mento_gemini_control import generar as _generar_gemini_controlado, es_temporal as _gemini_error_temporal
+from dre.mento_gemini_control import generar as _generar_gemini_controlado
 import json
 from typing import List, Dict, Any, Optional, Set, Tuple
 from google import genai
@@ -35,7 +35,7 @@ class SituacionTextoLibre(BaseModel):
 
 
 class BatchSituacionesTextoLibre(BaseModel):
-    situaciones: List[SituacionTextoLibre] = Field(min_length=5, max_length=5)
+    situaciones: List[SituacionTextoLibre] = Field(min_length=3, max_length=3)
 
 
 # ==========================================================
@@ -51,7 +51,7 @@ class EvaluacionItem(BaseModel):
 
 
 class BatchEvaluacionTextoLibre(BaseModel):
-    correcciones: List[EvaluacionItem] = Field(min_length=5, max_length=5)
+    correcciones: List[EvaluacionItem] = Field(min_length=3, max_length=3)
 
 
 # Alias para compatibilidad
@@ -190,15 +190,15 @@ def _clave_perfil(perfil):
 
 
 def _asignar_disparadores(perfil, nivel_inicial):
-    """Asigna a cada uno de los 5 niveles un tipo de disparador distinto:
-    3 situaciones sobre algo propio de la persona y 2 sobre algo que
+    """Asigna a cada uno de los 3 niveles un tipo de disparador distinto:
+    2 situaciones sobre algo propio de la persona y 1 sobre algo que
     hace o dice otra persona, mezcladas al azar."""
     pool = _DISPARADORES.get(_clave_perfil(perfil), _DISPARADORES["familia"])
     rnd = random.Random()
-    elegidos = rnd.sample(pool["propios"], 3) + rnd.sample(pool["otros"], min(2, len(pool["otros"])))
-    if len(elegidos) < 5:
+    elegidos = rnd.sample(pool["propios"], 2) + rnd.sample(pool["otros"], min(1, len(pool["otros"])))
+    if len(elegidos) < 3:
         resto = [d for d in pool["propios"] if d not in elegidos]
-        elegidos += rnd.sample(resto, 5 - len(elegidos))
+        elegidos += rnd.sample(resto, 3 - len(elegidos))
     rnd.shuffle(elegidos)
     lineas = "\n".join(f"    - NIVEL {nivel_inicial + i}: {d}" for i, d in enumerate(elegidos))
     return (
@@ -207,8 +207,8 @@ def _asignar_disparadores(perfil, nivel_inicial):
         "    - Cada situación gira en torno a su disparador, con detalles concretos y propios de la persona. "
         "El disparador indica el TIPO de escena: redactala con tus palabras, no copies la frase.\n"
         "    - No hace falta que alguien le diga algo a la persona: puede ser algo que siente, que le pasa o que tiene que enfrentar.\n"
-        "    - PROHIBIDO que más de 2 de las 5 situaciones consistan en un comentario o una actitud de otra persona.\n"
-        "    - Las 5 escenas deben ser de tipos claramente distintos entre sí."
+        "    - PROHIBIDO que más de 1 de las 3 situaciones consistan en un comentario o una actitud de otra persona.\n"
+        "    - Las 3 escenas deben ser de tipos claramente distintos entre sí."
     )
 
 
@@ -243,7 +243,7 @@ def _bloque_personalizacion(perfil, contexto, genero, edad_str):
             "    - Pareja: si está en pareja, familia política en 1 situación como máximo; si no, no menciones pareja.\n"
             "    - Ocupación: solo como trasfondo (agenda, cansancio, tiempo), nunca como tema central.\n"
             "    - Edad y género: ajustá escenarios, vocabulario y personajes en segunda persona, sin estereotipos.\n"
-            f"    - Repartí los vínculos entre: {perfil['vinculos']}. Ningún vínculo en más de 2 de las 5 situaciones.\n"
+            f"    - Repartí los vínculos entre: {perfil['vinculos']}. Ningún vínculo en más de 1 de las 3 situaciones.\n"
             "    - No nombres los datos del perfil de forma forzada o literal; que se noten orgánicamente en el escenario."
         )
 
@@ -283,7 +283,7 @@ def _bloque_personalizacion(perfil, contexto, genero, edad_str):
         if temas:
             extras += (
                 f"    - Temas de salud que la persona quiere practicar: {', '.join(temas)}. "
-                "Al menos 3 de las 5 situaciones deben relacionarse con esos temas. "
+                "Al menos 2 de las 3 situaciones deben relacionarse con esos temas. "
                 "Nunca generes situaciones sobre peso, alimentación restrictiva, imagen corporal, diagnósticos ni condiciones clínicas.\n"
             )
     elif perfil is _PERFILES_CATEGORIA["vinculos"]:
@@ -291,13 +291,13 @@ def _bloque_personalizacion(perfil, contexto, genero, edad_str):
         if temas:
             extras += (
                 f"    - Situaciones sociales que la persona quiere practicar: {', '.join(temas)}. "
-                "Al menos 3 de las 5 situaciones deben relacionarse con esos temas.\n"
+                "Al menos 2 de las 3 situaciones deben relacionarse con esos temas.\n"
             )
     return (
         base
         + "\n    CÓMO USAR LOS DATOS PERSONALES:\n"
         f"    - La categoría es {perfil['nombre']} y el centro de TODAS las situaciones es: {perfil['ambito']}.\n"
-        "    - NO uses convivencia, hermanos ni familia para armar las escenas. Podés mencionar a un familiar en 1 de las 5 situaciones "
+        "    - NO uses convivencia, hermanos ni familia para armar las escenas. Podés mencionar a un familiar en 1 de las 3 situaciones "
         "como máximo, solo como detalle de fondo y nunca como quien causa el malestar.\n"
         + extra_ocupacion
         + extra_pareja
@@ -312,11 +312,11 @@ def _bloque_personalizacion(perfil, contexto, genero, edad_str):
 
 def _armar_especificacion_niveles(nivel_inicial: int) -> str:
     """
-    Construye la descripción detallada de los 5 niveles consecutivos
+    Construye la descripción detallada de los 3 niveles consecutivos
     para incluirla en el prompt de Gemini.
     """
     lineas = []
-    for i in range(5):
+    for i in range(3):
         lvl = nivel_inicial + i
         cfg = configuracion_nivel(lvl)
         ang_str = "A libre elección de la persona"
@@ -325,7 +325,7 @@ def _armar_especificacion_niveles(nivel_inicial: int) -> str:
             ang_str = f"Ángulo {cfg['angulo_pedido']}: {ang_info['nombre']} ('{ang_info['guia']}')"
 
         lineas.append(
-            f"NIVEL {lvl} (Posición {i+1} de 5 en el batch):\n"
+            f"NIVEL {lvl} (Posición {i+1} de 3 en el batch):\n"
             f"- Banda: {cfg['banda']} | Fase: {cfg['fase']}"
             + (f" | Tramo: {cfg['tramo']}" if cfg['tramo'] else "")
             + f"\n- Tipo de situación: {cfg['tipo_situacion']} ({cfg['intensidad']}, {cfg['enfoque']})\n"
@@ -342,8 +342,8 @@ def _armar_especificacion_niveles(nivel_inicial: int) -> str:
 
 def generar_batch_texto_libre(estado, nivel_inicial: int = 1, categoria: str = "familia"):
     """
-    Genera 5 situaciones para el juego de Contraargumento.
-    La dificultad está estrictamente determinada por los 5 niveles consecutivos [nivel_inicial .. nivel_inicial+4].
+    Genera 3 situaciones para el juego de Contraargumento.
+    La dificultad está estrictamente determinada por los 3 niveles consecutivos [nivel_inicial .. nivel_inicial+4].
     El perfil_contexto solo se usa para personalizar el ámbito cotidiano.
     """
     contexto = estado.get("perfil_contexto", {})
@@ -357,14 +357,14 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1, categoria: str = "
     spec_niveles = _armar_especificacion_niveles(nivel_inicial)
 
     prompt = f"""
-    Generá EXACTAMENTE 5 situaciones de regulación emocional mediante
+    Generá EXACTAMENTE 3 situaciones de regulación emocional mediante
     cognitive reappraisal (modo Contraargumento) en la categoría {nombre_cat}.
 
     {bloque_personal}
 
     {bloque_disparadores}
 
-    ESPECIFICACIÓN OBLIGATORIA DE CADA UNO DE LOS 5 NIVELES (GENERAR EN ESTE ORDEN EXACTO):
+    ESPECIFICACIÓN OBLIGATORIA DE CADA UNO DE LOS 3 NIVELES (GENERAR EN ESTE ORDEN EXACTO):
     {spec_niveles}
 
     CAMPOS REQUERIDOS PARA CADA SITUACIÓN:
@@ -387,7 +387,7 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1, categoria: str = "
     - Si pide Ángulo 3 (otra explicación): el reappraisal inicial debe apoyarse en una explicación probable de lo que pasó.
 
     REGLAS GENERALES:
-    - Las 5 situaciones deben ser DISTINTAS entre sí.
+    - Las 3 situaciones deben ser DISTINTAS entre sí.
     - Situaciones cotidianas reales de {perfil_cat['ambito']}, no todas basadas en lo que otra persona dice o hace.
     - Con lectura Tipo III, NADA en la situación ni en el reappraisal puede obligar a la persona a demostrar que algo real es falso.
     - Usá español argentino simple.
@@ -405,13 +405,13 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1, categoria: str = "
         },
     )
 
-    print(f"Gemini respondió batch niveles {nivel_inicial} a {nivel_inicial + 4}")
+    print(f"Gemini respondió batch niveles {nivel_inicial} a {nivel_inicial + 2}")
 
     batch = BatchSituacionesTextoLibre.model_validate_json(response.text)
     situaciones = [s.model_dump() for s in batch.situaciones]
 
-    if len(situaciones) != 5:
-        raise ValueError(f"Gemini devolvió {len(situaciones)} situaciones en lugar de 5")
+    if len(situaciones) != 3:
+        raise ValueError(f"Gemini devolvió {len(situaciones)} situaciones en lugar de 3")
 
     # Adjuntar metadatos por Python (no Gemini)
     for i, s in enumerate(situaciones):
@@ -432,7 +432,7 @@ def generar_batch_texto_libre(estado, nivel_inicial: int = 1, categoria: str = "
 
 def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial: int = 1, categoria: str = "familia"):
     """
-    Genera 5 situaciones adaptadas al desempeño previo en el juego de Contraargumento.
+    Genera 3 situaciones adaptadas al desempeño previo en el juego de Contraargumento.
     IMPORTANTE: La dificultad está fijada estrictamente por los niveles [nivel_inicial .. nivel_inicial+4].
     El historial solo orienta temas, focos y qué fallas o ángulos reforzar, NUNCA altera la dificultad ni el perfil.
     """
@@ -449,7 +449,7 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
     historial_texto_json = json.dumps(historial_texto, ensure_ascii=False, indent=2)
 
     prompt = f"""
-    Generá EXACTAMENTE 5 situaciones de regulación emocional mediante
+    Generá EXACTAMENTE 3 situaciones de regulación emocional mediante
     cognitive reappraisal (modo Contraargumento) en la categoría {nombre_cat}.
 
     {bloque_personal}
@@ -465,7 +465,7 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
     - NUNCA alteres ni relajes la personalización por perfil (respetá rigurosamente las pautas de CÓMO USAR LOS DATOS PERSONALES).
     - No copies situaciones anteriores del historial.
 
-    ESPECIFICACIÓN OBLIGATORIA DE CADA UNO DE LOS 5 NIVELES (GENERAR EN ESTE ORDEN EXACTO):
+    ESPECIFICACIÓN OBLIGATORIA DE CADA UNO DE LOS 3 NIVELES (GENERAR EN ESTE ORDEN EXACTO):
     {spec_niveles}
 
     CAMPOS REQUERIDOS PARA CADA SITUACIÓN:
@@ -487,7 +487,7 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
     - Si pide Ángulo 3 (otra explicación): el reappraisal inicial debe apoyarse en una explicación probable de lo que pasó.
 
     REGLAS GENERALES:
-    - 5 situaciones distintas entre sí y distintas al historial.
+    - 3 situaciones distintas entre sí y distintas al historial.
     - Situaciones cotidianas reales de {perfil_cat['ambito']}, no todas basadas en lo que otra persona dice o hace.
     - Con lectura Tipo III, nada en la situación ni en el reappraisal obliga a negar hechos reales.
     - Usá español argentino simple.
@@ -505,13 +505,13 @@ def generar_batch_texto_libre_adaptativo(historial_texto, estado, nivel_inicial:
         },
     )
 
-    print(f"Gemini respondió batch adaptativo niveles {nivel_inicial} a {nivel_inicial + 4}")
+    print(f"Gemini respondió batch adaptativo niveles {nivel_inicial} a {nivel_inicial + 2}")
 
     batch = BatchSituacionesTextoLibre.model_validate_json(response.text)
     situaciones = [s.model_dump() for s in batch.situaciones]
 
-    if len(situaciones) != 5:
-        raise ValueError(f"Gemini devolvió {len(situaciones)} situaciones en lugar de 5")
+    if len(situaciones) != 3:
+        raise ValueError(f"Gemini devolvió {len(situaciones)} situaciones en lugar de 3")
 
     # Adjuntar metadatos por Python
     for i, s in enumerate(situaciones):
@@ -561,8 +561,8 @@ def evaluar_batch_texto_libre(ejercicios: List[Dict[str, Any]]) -> List[Dict[str
     Evalúa en 1 sola llamada batch a Gemini las 5 tuplas completas.
     Calcula en Python 'resultado' ("pasa" o "frena") y ajusta el prefijo.
     """
-    if len(ejercicios) != 5:
-        raise ValueError(f"Se esperaban 5 ejercicios para evaluar, se recibieron {len(ejercicios)}")
+    if len(ejercicios) != 3:
+        raise ValueError(f"Se esperaban 3 ejercicios para evaluar, se recibieron {len(ejercicios)}")
 
     # Preparar el contenido estructurado de cada ejercicio
     ejercicios_para_prompt = []
@@ -590,7 +590,7 @@ def evaluar_batch_texto_libre(ejercicios: List[Dict[str, Any]]) -> List[Dict[str
         })
 
     prompt = f"""
-    Evaluá las siguientes 5 respuestas completas de regulación emocional mediante
+    Evaluá las siguientes 3 respuestas completas de regulación emocional mediante
     cognitive reappraisal (modo Contraargumento) de un usuario.
     Devolvé un comentario de corrección conciso (MÁXIMO 45 palabras) y la lista de códigos de fallas detectadas por cada una.
 
@@ -620,7 +620,7 @@ def evaluar_batch_texto_libre(ejercicios: List[Dict[str, Any]]) -> List[Dict[str
     EJERCICIOS A EVALUAR:
     {json.dumps(ejercicios_para_prompt, ensure_ascii=False, indent=2)}
 
-    Devolvé exactamente 5 correcciones en el array "correcciones", en el mismo orden.
+    Devolvé exactamente 3 correcciones en el array "correcciones", en el mismo orden.
     """
 
     client = _obtener_gemini_client()
@@ -638,8 +638,8 @@ def evaluar_batch_texto_libre(ejercicios: List[Dict[str, Any]]) -> List[Dict[str
     batch = BatchEvaluacionTextoLibre.model_validate_json(response.text)
     correcciones = [c.model_dump() for c in batch.correcciones]
 
-    if len(correcciones) != 5:
-        raise ValueError(f"Gemini devolvió {len(correcciones)} correcciones en lugar de 5")
+    if len(correcciones) != 3:
+        raise ValueError(f"Gemini devolvió {len(correcciones)} correcciones en lugar de 3")
 
     # Procesar resultado en Python (NO Gemini) y formatear prefijo
     for ej, corr in zip(ejercicios, correcciones):

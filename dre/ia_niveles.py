@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from typing import List
 
 TECHO_UX = 7
+TAMANO_BATCH_IA = 3
 
 class EjercicioFamiliaIA(BaseModel):
     estrategia: str
@@ -62,7 +63,7 @@ def _receta_dificultad(numero):
 
 def _instrucciones_niveles(inicio):
     instrucciones = []
-    for numero in range(inicio, inicio + 10):
+    for numero in range(inicio, inicio + TAMANO_BATCH_IA):
         grupos, situacion = _receta_dificultad(numero)
         instrucciones.append(
             f'Ejercicio {numero - inicio + 1} (nivel global {numero}): '
@@ -117,9 +118,9 @@ def _generar_batch(estado, inicio, historial=None, categoria="familia"):
     reglas_escenarios = reglas_categoria[categoria]
 
     prompt = f"""
-Generá EXACTAMENTE 10 ejercicios consecutivoss de cognitive reappraisal.
+Generá EXACTAMENTE {TAMANO_BATCH_IA} ejercicios consecutivos de cognitive reappraisal.
 Categoría: {nombre_categoria}. Estrategia que se evalúa: Reconstrual. Tipo: opcion_multiple.
-Los 10 escenarios deben pertenecer a la categoría {nombre_categoria}.
+Los {TAMANO_BATCH_IA} escenarios deben pertenecer a la categoría {nombre_categoria}.
 No generar situaciones de otras categorías.
 Cada ejercicio debe tener UNA SOLA respuesta correcta y respetar EXACTAMENTE su receta individual.
 Generá las opciones EN ORDEN FIJO: primero la correcta y luego los distractores por grupo, G1, G2, G3, G4 y G5 según la receta. No mezcles las opciones: Python las mezclará después.
@@ -140,7 +141,7 @@ REGLAS OBLIGATORIAS DE PERSONALIZACIÓN:
 - No mencionar literalmente los datos del perfil.
 
 VARIEDAD DE SITUACIONES:
-- Los 10 escenarios deben ser distintos.
+- Los {TAMANO_BATCH_IA} escenarios deben ser distintos.
 - Usar conflictos cotidianos, concretos y realistas.
 - Describir cada situación en 2 a 4 oraciones, en segunda persona.
 - Usar español argentino simple y natural.
@@ -151,7 +152,7 @@ Estas reglas personalizan solamente los escenarios.
 NO modifican las cantidades de opciones, los grupos G1-G5
 ni las bandas de dificultad establecidas para cada nivel.
 
-RECETA OBLIGATORIA PARA LOS 10 EJERCICIOS, EN ESTE ORDEN:
+RECETA OBLIGATORIA PARA LOS {TAMANO_BATCH_IA} EJERCICIOS, EN ESTE ORDEN:
 {_instrucciones_niveles(inicio)}
 
 DEFINICIÓN DE LOS DISTRACTORES (cada opción incorrecta debe pertenecer a UN grupo):
@@ -193,13 +194,13 @@ SITUACIONES: En bandas 1-2, un hecho simple sin pistas extra; en bandas 3-4, dos
 que se matizan sin resolver la duda; en banda 5, incertidumbre real y contexto con historia.
 La intensidad emocional NUNCA aumenta más allá de la banda 5. No agregues gravedad
 artificial para subir dificultad: desde nivel 14 solo cambian cantidad/calidad de opciones.
-Diez escenarios distintos de la categoría {nombre_categoria}, sin repetir literalmente los anteriores.
+{TAMANO_BATCH_IA} escenarios distintos de la categoría {nombre_categoria}, sin repetir literalmente los anteriores.
 DESEMPEÑO ANTERIOR (si existe):
 {historial_texto}
 Si hubo errores, retomá el principio en escenarios NUEVOS, pero NO cambies la receta
 numérica del nivel. Si no hubo errores, tampoco adelantes bandas ni opciones.
 
-CONTRATO DE SALIDA: 10 elementos en 'niveles' en el orden indicado; cada uno con
+CONTRATO DE SALIDA: {TAMANO_BATCH_IA} elementos en 'niveles' en el orden indicado; cada uno con
 'estrategia' EXACTAMENTE 'Reconstrual', 'tipo' EXACTAMENTE 'opcion_multiple',
 'nombre', 'escenario' (lista de textos), 'opciones' (lista de textos, cantidad según receta),
 'correctas' (lista con UN índice válido desde cero), 'mensaje_exito' y 'mensaje_error'.
@@ -224,7 +225,7 @@ REGLAS DE FEEDBACK:
         if ultimo_error:
             prompt_intento += (
                 "\nEL BATCH ANTERIOR FUE RECHAZADO: " + ultimo_error +
-                "\nRegenerá los diez ejercicios completos y corregí estrictamente "
+                f"\nRegenerá los {TAMANO_BATCH_IA} ejercicios completos y corregí estrictamente "
                 "las cantidades y el ORDEN fijo de opciones: correcta en 0, luego G1, G2, G3, G4, G5."
             )
         try:
@@ -240,12 +241,12 @@ REGLAS DE FEEDBACK:
             print(">>> GEMINI RESPONDIÓ", flush=True)
             batch = BatchEjerciciosFamiliaIA.model_validate_json(response.text)
             niveles = [nivel.model_dump() for nivel in batch.niveles]
-            if len(niveles) != 10:
-                raise ValueError(f'Se esperaban 10 niveles, llegaron {len(niveles)}')
+            if len(niveles) != TAMANO_BATCH_IA:
+                raise ValueError(f'Se esperaban {TAMANO_BATCH_IA} niveles, llegaron {len(niveles)}')
             for numero, nivel in enumerate(niveles, start=inicio):
                 validar_nivel_ia(nivel, numero, mezclar=False)
                 validar_nivel_ia(nivel, mezclar=True)
-            print(f'Batch IA validado: niveles globales {inicio}-{inicio + 9}')
+            print(f'Batch IA validado: niveles globales {inicio}-{inicio + TAMANO_BATCH_IA - 1}')
             print('\n===== BATCH IA GENERADO =====')
             print(json.dumps(niveles, ensure_ascii=False, indent=2))
             print('=============================\n')
@@ -267,17 +268,19 @@ def generar_batch_familia_ia(estado, categoria="familia"):
 
 
 def generar_batch_familia_ia_adaptativo(historial, estado, categoria="familia"):
-    historiales = estado.get("_historial_ia_por_categoria", {})
-    completados = len(historiales.get(categoria, []))
-
-    inicio = ((completados + 3) // 10) * 10 + 1
-
-    return _generar_batch(
+    # Mantener numeración global creciente aunque la precarga comience
+    # antes de completar el primer ejercicio del batch actual.
+    proximos = estado.setdefault("_ia_proximo_inicio_por_categoria", {})
+    inicio = proximos.get(categoria, TAMANO_BATCH_IA + 1)
+    niveles = _generar_batch(
         estado,
         inicio=inicio,
         historial=historial,
         categoria=categoria,
     )
+    proximos[categoria] = inicio + TAMANO_BATCH_IA
+    return niveles
+
 
 def validar_nivel_ia(ejercicio, numero_nivel=None, mezclar=True):
     if ejercicio['tipo'] != 'opcion_multiple':
